@@ -5,7 +5,6 @@ import matplotlib.pyplot as plt
 import requests
 import google.generativeai as genai
 from PIL import Image
-from scipy.optimize import minimize
 
 # --- CONFIGURATION & THEME ---
 st.set_page_config(
@@ -15,50 +14,39 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# Force Dark Mode Styling via CSS
+# Force Dark Mode Styling
 st.markdown("""
     <style>
-    .main {
-        background-color: #0e1117;
-        color: #ffffff;
-    }
-    .stButton>button {
-        width: 100%;
-        background-color: #00ff41;
-        color: black;
-        font-weight: bold;
-    }
+    .main { background-color: #0e1117; color: #ffffff; }
+    .stButton>button { width: 100%; background-color: #00ff41; color: black; font-weight: bold; }
+    [data-testid="stMetricValue"] { color: #00ff41; }
     </style>
     """, unsafe_allow_html=True)
 
 # --- API SETUP ---
-# Retrieve keys from Streamlit Secrets
 GOOGLE_API_KEY = st.secrets.get("GOOGLE_API_KEY", "")
 WEATHER_API_KEY = st.secrets.get("OPENWEATHER_API_KEY", "")
 
 if GOOGLE_API_KEY:
     genai.configure(api_key=GOOGLE_API_KEY)
 
-# --- CORE PHYSICS ENGINE (DIGITAL TWIN) ---
-def calculate_digital_twin(power_hp, weight_kg, cd, air_density=1.225):
-    """Calculates the theoretical acceleration curve based on aero drag."""
+# --- CORE PHYSICS ENGINE ---
+def calculate_digital_twin(power_hp, weight_kg, cd, rho):
+    """Calculates theoretical G-force curve vs Speed."""
     power_watts = power_hp * 745.7
-    speeds = np.linspace(0, 80, 100)  # 0 to ~288 km/h
-    frontal_area = 1.5 # m^2 (Typical small race car)
+    speeds_kmh = np.linspace(5, 280, 100) 
+    speeds_ms = speeds_kmh / 3.6
+    frontal_area = 1.5 
     
-    # F_net = F_engine - F_drag
-    # a = (P/v - 0.5 * rho * v^2 * Cd * A) / m
-    accel = []
-    for v in speeds:
-        if v == 0:
-            accel.append(1.0) # Launch G-force
-        else:
-            force_engine = power_watts / v
-            force_drag = 0.5 * air_density * (v**2) * cd * frontal_area
-            a = (force_engine - force_drag) / weight_kg
-            accel.append(max(0, a / 9.81)) # Convert to Gs
+    accel_g = []
+    for v in speeds_ms:
+        # F_net = (Power/v) - (0.5 * rho * v^2 * Cd * A)
+        force_engine = power_watts / v
+        force_drag = 0.5 * rho * (v**2) * cd * frontal_area
+        net_accel_ms2 = (force_engine - force_drag) / weight_kg
+        accel_g.append(max(0, net_accel_ms2 / 9.81))
             
-    return speeds * 3.6, accel # Convert m/s to km/h
+    return speeds_kmh, accel_g
 
 # --- UI LAYOUT ---
 st.title("🏎️ ELITE-RACING-AGENT | Championship OS")
@@ -73,70 +61,66 @@ with st.sidebar:
     
     st.header("Environment")
     city = st.text_input("Track City", "Colorado Springs")
+    
+    # Dynamic Air Density Calculation
     if st.button("Sync Live Weather"):
-        # Placeholder for real API call logic
-        st.success(f"Synced to {city}: 12°C | 1013 hPa")
+        try:
+            url = f"http://api.openweathermap.org/data/2.5/weather?q={city}&appid={WEATHER_API_KEY}&units=metric"
+            res = requests.get(url).json()
+            temp_k = res['main']['temp'] + 273.15
+            press_pa = res['main']['pressure'] * 100
+            # rho = P / (R * T)
+            st.session_state['rho'] = round(press_pa / (287.05 * temp_k), 4)
+            st.success(f"Synced: {res['main']['temp']}°C")
+        except:
+            st.error("Weather Sync Failed. Using Sea Level.")
+            st.session_state['rho'] = 1.225
+
+    current_rho = st.session_state.get('rho', 1.225)
+    st.metric("Air Density (ρ)", f"{current_rho} kg/m³")
 
 # Main Dashboard Grid
 col1, col2 = st.columns([2, 1])
 
 with col1:
     st.subheader("Performance Map: Digital Twin vs. Real World")
-    
-    # Generate Digital Twin Data
-    v_kmh, a_g = calculate_digital_twin(power, weight, drag_coeff)
+    v_kmh, a_g = calculate_digital_twin(power, weight, drag_coeff, current_rho)
     
     fig, ax = plt.subplots(figsize=(10, 5))
     plt.style.use('dark_background')
-    
-    # Plot the Digital Twin Line
     ax.plot(v_kmh, a_g, color='#00ff41', linewidth=3, label="Digital Twin (Target)")
     
-    # Handle File Upload
     uploaded_file = st.file_uploader("Upload Telemetry CSV", type="csv")
     if uploaded_file:
         df = pd.read_csv(uploaded_file)
-        # Smart mapping for speed/accel headers
         if 'speed' in df.columns and 'accel' in df.columns:
-            ax.scatter(df['speed'], df['accel'], color='#ff4b4b', s=10, label="Real World Data", alpha=0.6)
+            ax.scatter(df['speed'], df['accel'], color='#ff4b4b', s=12, label="Live Telemetry")
     
     ax.set_xlabel("Speed (km/h)")
-    ax.set_ylabel("Longitudinal Acceleration (G)")
+    ax.set_ylabel("Longitudinal G")
     ax.legend()
-    ax.grid(alpha=0.2)
     st.pyplot(fig)
 
 with col2:
     st.subheader("Strategy & Insights")
-    
-    # Display Car Image
     try:
-        car_img = Image.open("1000006405.png")
-        st.image(car_img, use_column_width=True)
+        st.image(Image.open("1000006405.png"), use_container_width=True)
     except:
-        st.warning("Upload '1000006405.png' to GitHub to see car photo.")
+        st.warning("Upload '1000006405.png' to GitHub.")
 
-    # AI Strategy Agent
-    st.info("💡 **Crew Chief Advice**")
+    # Dynamic Probability Logic
+    p_to_w = power / weight
+    # Penalty based on density deviation from sea level
+    density_ratio = current_rho / 1.225
+    prob_score = min(99, max(10, int((p_to_w * density_ratio / 0.75) * 100)))
+    
+    st.metric("Winning Probability", f"{prob_score}%", f"{round(current_rho - 1.225, 2)} ρ-Delta")
+
     if GOOGLE_API_KEY:
         if st.button("Generate Strategy Brief"):
             model = genai.GenerativeModel('gemini-flash-latest')
-            prompt = f"""
-            You are a professional Race Engineer.
-            Car: {power}HP, {weight}kg. Location: {city}.
-            The car is showing a 92% winning probability based on the current Digital Twin.
-            Provide a 2-sentence tactical tip for the driver regarding aero and throttle application.
-            Be concise and professional.
-            """
-            response = model.generate_content(prompt)
-            st.write(response.text)
-    else:
-        st.write("Connect Gemini API in Secrets to enable AI Agent.")
+            prompt = f"You are a Race Engineer. Car: {power}HP, {weight}kg. Track: {city} at {current_rho} density. Prob: {prob_score}%. Give 2 tactical tips."
+            st.info(model.generate_content(prompt).text)
 
-    # Quick Stats
-    st.metric("Winning Probability", "92%", "+3% vs Prev Run")
-    st.metric("Density Altitude", "6,150 ft", "Correction Active")
-
-# Footer
 st.markdown("---")
-st.caption("Elite-Racing-Agent v1.0 | Proprietary Strategy Engine | Driver: Championship Edition")
+st.caption("Elite-Racing-Agent v1.1 | Developed for High-Performance Validation")
