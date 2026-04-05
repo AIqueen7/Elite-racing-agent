@@ -93,7 +93,7 @@ with col1:
     ax.plot(v_kmh, a_g, color='#00ff41', linewidth=3, label="Digital Twin (Target)")
     
     # Handle File Upload
-    uploaded_file = st.file_誠_uploader("Upload Telemetry CSV", type="csv")
+    uploaded_file = st.file_uploader("Upload Telemetry CSV", type="csv")
     if uploaded_file:
         df = pd.read_csv(uploaded_file)
         # Smart mapping for speed/accel headers
