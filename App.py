@@ -72,36 +72,32 @@ curve, cur_hp = sim_physics(hp, kg, rho, cd, mu, v_ref)
 t1, t2, t3 = st.tabs(["📊 PERFORMANCE SUMMARY", "🧬 PHYSICS & SENSITIVITY", "🤖 CHIEF AGENT"])
 
 with t1:
-    c1, c2, c3, c4 = st.columns(4)
+    # --- ROW 1: MASTER METRICS ---
+    c1, c2, c3, c4, c5 = st.columns(5)
+    
+    # 1. Density Altitude (The Aviator's Metric)
     da = int((1.225 - rho) * 10000)
     c1.metric("DENSITY ALTITUDE", f"{da} ft")
-    c2.metric("EFFECTIVE BHP", f"{int(cur_hp)}")
-    c3.metric("AIR DENSITY (ρ)", f"{rho}")
+    
+    # 2. Aero Crossover (When Downforce = Weight)
+    # Formula: V = sqrt( (2 * Weight) / (rho * Cl * Area) )
+    v_aero = int(np.sqrt((kg * 9.81) / (0.5 * rho * (cd * 2.5) * 1.5)) * 3.6)
+    c2.metric("V-AERO CROSSOVER", f"{v_aero} kmh", "1.0G Aero Load")
+    
+    # 3. Effective Power (DA Adjusted)
+    c3.metric("EFFECTIVE BHP", f"{int(cur_hp)} hp", f"{int(cur_hp - hp)} loss")
+    
+    # 4. Realistic V-MAX
     vmax = int(np.cbrt((cur_hp * 745.7 * 0.85) / (0.5 * rho * cd * 1.5)) * 3.6)
     c4.metric("REAL V-MAX", f"{vmax} kmh", f"{int(vmax*0.621)} mph")
 
-    mc, sc = st.columns([2, 1])
-    with mc:
-        st.subheader("Longitudinal G-Envelope")
-        fig, ax = plt.subplots(figsize=(10, 4.5)); plt.style.use('dark_background')
-        ax.plot(v_ref, curve, color='#00e5ff', lw=2.5, label="Physics Model")
-        f = st.file_uploader("Upload Telemetry (CSV)", type="csv")
-        if f:
-            df = pd.read_csv(f)
-            if 'speed' in df.columns and 'accel' in df.columns:
-                ax.scatter(df['speed'], df['accel'], c=df['accel'], cmap='magma', s=10, alpha=0.4)
-        ax.set_xlabel("Speed (km/h)"); ax.set_ylabel("G-Force"); ax.legend(); st.pyplot(fig)
-
-    with sc:
-        st.subheader("G-G Friction Circle")
-        fig_gg, ax_gg = plt.subplots(figsize=(5, 5))
-        t = np.linspace(0, 2*np.pi, 100)
-        ax_gg.plot(mu*np.cos(t), mu*np.sin(t), color='#00e5ff', ls='--', alpha=0.4)
-        if f and 'lat_g' in df.columns and 'accel' in df.columns:
-            ax_gg.scatter(df['lat_g'], df['accel'], color='white', s=3, alpha=0.3)
-            g_u = np.sqrt(df['lat_g']**2 + df['accel']**2).mean()
-            st.write(f"Mean Grip Usage: {round((g_u/mu)*100,1)}%")
-        ax_gg.set_xlim(-mu-0.2, mu+0.2); ax_gg.set_ylim(-mu-0.2, mu+0.2); st.pyplot(fig_gg)
+    # 5. Grip Utilization (The Driver Audit)
+    if f:
+        df['g_sum'] = np.sqrt(df['lat_g']**2 + df['accel']**2)
+        utilization = (df['g_sum'].max() / mu) * 100
+        c5.metric("GRIP UTILIZATION", f"{round(utilization, 1)}%", "Peak vs. Limit")
+    else:
+        c5.metric("GRIP UTILIZATION", "N/A", "Upload CSV")
 
 with t2:
     st.header("Deep Chassis Analysis")
