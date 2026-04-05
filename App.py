@@ -84,17 +84,22 @@ with t1:
     # ROW 1: THE BIG FIVE (Key Metrics)
     c1, c2, c3, c4, c5 = st.columns(5)
     
+    # 1. Density Altitude
     da = int((1.225 - rho) * 10000)
     c1.metric("DENSITY ALTITUDE", f"{da} ft")
     
+    # 2. Aero Crossover (When Downforce = Weight)
     v_aero = int(np.sqrt((kg * 9.81) / (0.5 * rho * (cd * 2.5) * 1.5)) * 3.6)
     c2.metric("AERO CROSSOVER", f"{v_aero} kmh", "1.0G Load")
     
+    # 3. Effective Power
     c3.metric("EFFECTIVE BHP", f"{int(cur_hp)} hp", f"{int(cur_hp - hp)} loss")
     
+    # 4. Realistic V-MAX
     vmax = int(np.cbrt((cur_hp * 745.7 * 0.85) / (0.5 * rho * cd * 1.5)) * 3.6)
     c4.metric("REAL V-MAX", f"{vmax} kmh", f"{int(vmax*0.621)} mph")
 
+    # 5. Grip Utilization
     if df is not None and 'g_sum' in df.columns:
         util = (df['g_sum'].max() / mu) * 100
         c5.metric("GRIP UTILIZATION", f"{round(util, 1)}%", "Peak vs. Limit")
@@ -109,3 +114,45 @@ with t1:
         ax.plot(v_ref, curve, color='#00e5ff', lw=2.5, label="Physics Twin")
         if df is not None and 'speed' in df.columns and 'accel' in df.columns:
             ax.scatter(df['speed'], df['accel'], c=df['accel'], cmap='magma', s=10, alpha=0.4, label="Session")
+        ax.set_xlabel("Speed (km/h)"); ax.set_ylabel("G-Force"); ax.legend(); st.pyplot(fig)
+
+    with sc:
+        st.subheader("G-G Friction Circle")
+        fig_gg, ax_gg = plt.subplots(figsize=(5, 5))
+        t = np.linspace(0, 2*np.pi, 100)
+        ax_gg.plot(mu*np.cos(t), mu*np.sin(t), color='#00e5ff', ls='--', alpha=0.4)
+        if df is not None and 'lat_g' in df.columns and 'accel' in df.columns:
+            ax_gg.scatter(df['lat_g'], df['accel'], color='white', s=3, alpha=0.3)
+        ax_gg.set_xlim(-mu-0.2, mu+0.2); ax_gg.set_ylim(-mu-0.2, mu+0.2); st.pyplot(fig_gg)
+
+with t2:
+    st.header("Deep Chassis Analysis")
+    g1, g2 = st.columns(2)
+    with g1:
+        st.subheader("Grip Source Correlation")
+        aero_comp = [0.5 * rho * (v/3.6)**2 * (cd * 2.0) / (kg * 9.81) for v in v_ref]
+        fig1, ax1 = plt.subplots(); plt.style.use('dark_background')
+        ax1.fill_between(v_ref, mu, color='#222', label="Mechanical Limit")
+        ax1.plot(v_ref, aero_comp, color='#00e5ff', lw=2, label="Aero Component")
+        ax1.set_xlabel("Speed"); ax1.set_ylabel("G-Potential"); ax1.legend(); st.pyplot(fig1)
+
+    with g2:
+        st.subheader("Tire Energy Budget")
+        if df is not None and 'g_sum' in df.columns:
+            energy = df['g_sum'] * df['speed']
+            fig2, ax2 = plt.subplots(); plt.style.use('dark_background')
+            ax2.plot(df.index, energy, color='#ff4b4b')
+            ax2.set_ylabel("Work (Force x Velocity)"); st.pyplot(fig2)
+        else: st.info("Upload CSV to view energy flux.")
+
+with t3:
+    q = st.chat_input("Technical inquiry...")
+    if q:
+        with st.chat_message("assistant"):
+            if st.secrets.get("GOOGLE_API_KEY"):
+                genai.configure(api_key=st.secrets.get("GOOGLE_API_KEY"))
+                m = genai.GenerativeModel('gemini-1.5-flash')
+                ctx = f"Consultant for Jay Esterer. {hp}HP. Track: {venue_key}. Query: {q}"
+                st.write(m.generate_content(ctx).text)
+
+st.caption(f"v12.0 | Precision Spec | Track: {venue_key}")
