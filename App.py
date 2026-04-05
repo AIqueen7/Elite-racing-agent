@@ -114,4 +114,4 @@ with tabs[3]:
         3. `Damper_Pos` (Identifies the Bode Phasing of the Titanium uprights)
         """)
 
-st.caption("Elite-Racing-Agent | Sovereign Command Center | For the 40-Year Builder")
+st.caption("Elite-Racing-Agent")
