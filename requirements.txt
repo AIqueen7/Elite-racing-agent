@@ -5,5 +5,5 @@ matplotlib
 requests
 google-generativeai
 Pillow
-scipy
 torch
+scipy
