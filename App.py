@@ -6,7 +6,7 @@ import requests
 import google.generativeai as genai
 
 # --- 1. PRO-SPEC ARCHITECTURE ---
-st.set_page_config(page_title="Elite-Racing-Agent | Auditor Spec", page_icon="🏁", layout="wide")
+st.set_page_config(page_title="Elite-Racing-Agent", page_icon="🏁", layout="wide")
 
 st.markdown("""
     <style>
