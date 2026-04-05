@@ -29,7 +29,7 @@ st.markdown("""
         font-weight: bold;
     }
     </style>
-    """, unsafe_allow_stdio=True)
+    """, unsafe_allow_html=True)
 
 # --- API SETUP ---
 # Retrieve keys from Streamlit Secrets
