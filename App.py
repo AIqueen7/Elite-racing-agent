@@ -120,7 +120,7 @@ with col2:
     st.info("💡 **Crew Chief Advice**")
     if GOOGLE_API_KEY:
         if st.button("Generate Strategy Brief"):
-            model = genai.GenerativeModel('gemini-1.5-flash')
+            model = genai.GenerativeModel('gemini-flash-latest')
             prompt = f"""
             You are a professional Race Engineer.
             Car: {power}HP, {weight}kg. Location: {city}.
