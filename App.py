@@ -7,168 +7,169 @@ import google.generativeai as genai
 from PIL import Image
 import io
 
-# --- 1. CONFIGURATION & AGENT IDENTITY ---
-st.set_page_config(page_title="Elite-Racing-Agent: Singularity", page_icon="🧬", layout="wide")
+# --- 1. SYSTEM ARCHITECTURE & STYLING ---
+st.set_page_config(page_title="Elite-Racing-Agent | Pro Spec", page_icon="🏎️", layout="wide")
 
-# High-Performance UI (Matte Black & Cyber Neon)
 st.markdown("""
     <style>
     .main { background-color: #000000; color: #e0e0e0; }
-    [data-testid="stMetricValue"] { font-size: 48px !important; color: #00ff41; font-family: 'Monaco'; }
-    .stTabs [data-baseweb="tab-list"] { gap: 24px; }
-    .stTabs [data-baseweb="tab"] { height: 50px; background-color: #111; border-radius: 5px; color: white; }
-    .stTabs [data-baseweb="tab"]:hover { color: #00ff41; }
-    .science-box { padding: 15px; background: #0a0a0a; border: 1px solid #333; border-left: 5px solid #00ff41; border-radius: 5px; margin: 10px 0; }
-    .social-card { background: linear-gradient(135deg, #000 0%, #111 100%); border: 2px solid #00ff41; padding: 25px; border-radius: 15px; text-align: center; }
+    [data-testid="stMetricValue"] { font-size: 42px !important; color: #ff8700; font-family: 'Courier New'; }
+    .stTabs [data-baseweb="tab-list"] { gap: 10px; }
+    .stTabs [data-baseweb="tab"] { 
+        height: 50px; background-color: #111; border-radius: 5px 5px 0 0; color: white; border: 1px solid #333;
+    }
+    .status-banner { padding: 15px; border-radius: 10px; text-align: center; font-weight: bold; margin-bottom: 20px; }
+    .science-card { background: #0a0a0a; padding: 20px; border-radius: 10px; border: 1px solid #333; margin-top: 10px; }
     </style>
     """, unsafe_allow_html=True)
 
-# --- 2. THE ENGINE ROOM (PHYSICS & SIMS) ---
-def get_accel_curve(power, weight, rho, cd, mu, v_range):
-    """Calculates traction-limited acceleration Gs."""
+# --- 2. THE PHYSICS CORE ---
+def calculate_accel(power, weight, rho, cd, mu, v_range):
     v_ms = v_range / 3.6
     p_watts = power * 745.7
-    frontal_area = 1.5
-    return [min(((p_watts/v) - (0.5*rho*v**2*cd*frontal_area)) / (weight*9.81), mu) for v in v_ms]
+    # a = min(mu, (P/v - 0.5 * rho * v^2 * Cd * A) / (m * g))
+    return [min(((p_watts/v) - (0.5*rho*v**2*cd*1.5)) / (weight*9.81), mu) for v in v_ms]
 
-def run_monte_carlo(power, weight, rho, cd, mu, iterations=500):
-    """Simulates 500 laps with variable environmental noise."""
+def run_stochastic_sim(power, weight, rho, cd, mu, iterations=400):
     results = []
     for _ in range(iterations):
-        noisy_rho = np.random.normal(rho, rho * 0.05)
-        noisy_mu = np.random.normal(mu, mu * 0.05)
-        curve = get_accel_curve(power, weight, noisy_rho, cd, noisy_mu, np.array([100]))
-        results.append(curve[0])
+        # Environmental and Mechanical Noise (Gaussian)
+        n_rho = np.random.normal(rho, rho * 0.04)
+        n_mu = np.random.normal(mu, mu * 0.06)
+        # Check acceleration at a benchmark speed (e.g., 100kmh)
+        val = calculate_accel(power, weight, n_rho, cd, n_mu, np.array([100]))
+        results.append(val[0])
     return results
 
-# --- 3. SESSION STATE ---
-if 'rho' not in st.session_state: st.session_state['rho'] = 1.225
+# --- 3. SESSION & API CONFIG ---
 GOOGLE_API_KEY = st.secrets.get("GOOGLE_API_KEY", "")
 WEATHER_API_KEY = st.secrets.get("OPENWEATHER_API_KEY", "")
+if 'rho' not in st.session_state: st.session_state['rho'] = 1.225
+if 'chat_history' not in st.session_state: st.session_state['chat_history'] = []
 
-# --- 4. SIDEBAR: THE COMMANDER ---
+# --- 4. SIDEBAR: DATA INPUTS ---
 with st.sidebar:
-    st.title("🧬 SYSTEM ARCHITECT")
-    track_name = st.text_input("Track Target", "Strawberry Creek Raceway")
-    weight = st.number_input("Gross Weight (kg)", 500, 2000, 850)
-    power = st.number_input("Horsepower (HP)", 100, 2000, 600)
-    mu = st.slider("Tire Friction (μ)", 0.5, 2.0, 1.2)
-    cd = st.slider("Drag Coeff (Cd)", 0.2, 0.9, 0.45)
+    st.title("🛠️ TECH SPEC")
+    track_name = st.text_input("Track Identifier", "Strawberry Creek Raceway")
     
-    if st.button("SYNC ENVIRONMENT"):
-        url = f"http://api.openweathermap.org/data/2.5/weather?lat=53.3377&lon=-114.1603&appid={WEATHER_API_KEY}&units=metric"
-        try:
-            res = requests.get(url).json()
-            temp_k = res['main']['temp'] + 273.15
-            st.session_state['rho'] = round((res['main']['pressure']*100) / (287.05 * temp_k), 4)
-        except: st.session_state['rho'] = 1.225
+    with st.expander("Vehicle DNA", expanded=True):
+        power = st.number_input("Horsepower (HP)", 100, 2000, 600)
+        weight = st.number_input("Mass (kg)", 500, 2500, 850)
+        mu = st.slider("Tire Grip (μ)", 0.5, 2.0, 1.2)
+        cd = st.slider("Aero Drag (Cd)", 0.2, 0.9, 0.45)
 
-# --- 5. THE MISSION TABS ---
-tab_mission, tab_lab, tab_comms, tab_social = st.tabs(["🚀 MISSION CONTROL", "🔬 THE SCIENCE LAB", "💬 AGENT COMMS", "📸 SOCIAL GARAGE"])
+    with st.expander("Environmental Sync"):
+        if st.button("PULL LIVE DATA"):
+            try:
+                # Optimized for track-specific coordinates
+                url = f"http://api.openweathermap.org/data/2.5/weather?lat=53.3377&lon=-114.1603&appid={WEATHER_API_KEY}&units=metric"
+                res = requests.get(url).json()
+                t_k = res['main']['temp'] + 273.15
+                st.session_state['rho'] = round((res['main']['pressure']*100) / (287.05 * t_k), 4)
+                st.success("Synced to Track Barometer")
+            except: st.error("Weather API Timeout")
+        rho = st.session_state['rho']
 
-rho = st.session_state['rho']
+# --- 5. DASHBOARD CALCULATIONS ---
+sim_data = run_stochastic_sim(power, weight, rho, cd, mu)
+mean_g = np.mean(sim_data)
+stability_score = 100 - (np.std(sim_data) / mean_g * 1000) # Custom stability metric
+win_prob = int((mean_g / mu) * 100)
 
-with tab_mission:
-    st.markdown(f"### Current Mission: {track_name}")
-    col1, col2, col3, col4 = st.columns(4)
+# --- 6. MISSION CONTROL UI ---
+tab_dashboard, tab_science, tab_agent, tab_roi = st.tabs(["🏎️ MISSION CONTROL", "🔬 SCIENCE LAB", "🤖 AGENT COMMS", "💰 MC-LAREN ROI"])
+
+with tab_dashboard:
+    # Top Level Metrics
+    m1, m2, m3, m4 = st.columns(4)
+    m1.metric("WIN PROBABILITY", f"{win_prob}%")
+    m2.metric("STABILITY INDEX", f"{round(stability_score, 1)}", "68% Conf")
+    m3.metric("AIR DENSITY", f"{rho}")
+    m4.metric("POWER/WEIGHT", f"{round(power/weight, 2)}")
+
+    c_left, c_right = st.columns([2, 1])
     
-    sim_data = run_monte_carlo(power, weight, rho, cd, mu)
-    win_prob = int(np.mean(sim_data) * 100 / mu)
-    
-    col1.metric("WIN PROBABILITY", f"{win_prob}%", f"{round(np.std(sim_data), 3)} Sigma")
-    col2.metric("AIR DENSITY", f"{rho}")
-    col3.metric("PWR/WGT", f"{round(power/weight, 3)}")
-    col4.metric("DA ESTIMATE", f"{int((1.225-rho)*10000)} ft")
-
-    c_main, c_side = st.columns([2, 1])
-    
-    with c_main:
-        st.subheader("Performance Gap Analysis")
-        v_range = np.linspace(10, 250, 100)
-        target_curve = get_accel_curve(power, weight, rho, cd, mu, v_range)
+    with c_left:
+        st.subheader("Performance Envelope: Target vs Actual")
+        v_range = np.linspace(10, 260, 100)
+        target = calculate_accel(power, weight, rho, cd, mu, v_range)
         
         fig, ax = plt.subplots(figsize=(10, 4))
         plt.style.use('dark_background')
-        ax.plot(v_range, target_curve, color='#00ff41', linewidth=3, label="Digital Twin")
+        ax.plot(v_range, target, color='#ff8700', linewidth=3, label="Digital Twin (Ghost)")
         
-        tele_file = st.file_uploader("Upload Telemetry CSV", type="csv")
-        if tele_file:
-            df = pd.read_csv(tele_file)
+        uploaded = st.file_uploader("Upload Session Telemetry (CSV)", type="csv")
+        if uploaded:
+            df = pd.read_csv(uploaded)
             if 'speed' in df.columns and 'accel' in df.columns:
-                color_val = df['hr'] if 'hr' in df.columns else df['accel']
-                cmap = 'spring' if 'hr' in df.columns else 'viridis'
-                scatter = ax.scatter(df['speed'], df['accel'], c=color_val, cmap=cmap, s=15, alpha=0.7)
-                plt.colorbar(scatter, label="HR (BPM)" if 'hr' in df.columns else "Actual G")
+                # Biometric Overlays
+                color_map = df['hr'] if 'hr' in df.columns else df['accel']
+                label_txt = "HR (BPM)" if 'hr' in df.columns else "G-Force"
+                scat = ax.scatter(df['speed'], df['accel'], c=color_map, cmap='magma', s=12, alpha=0.6)
+                plt.colorbar(scat, label=label_txt)
         
-        ax.set_ylim(0, mu+0.2); ax.set_xlabel("Speed (km/h)"); ax.set_ylabel("Longitudinal G")
-        st.pyplot(fig)
+        ax.set_ylim(0, mu + 0.3); ax.legend(); st.pyplot(fig)
 
-    with c_side:
-        st.subheader("G-G Stability")
+    with c_right:
+        st.subheader("G-G Stability Circle")
         fig_gg, ax_gg = plt.subplots(figsize=(5, 5))
-        circle = plt.Circle((0, 0), mu, color='#00ff41', fill=False, linestyle='--')
+        circle = plt.Circle((0, 0), mu, color='#ff8700', fill=False, linestyle='--')
         ax_gg.add_artist(circle)
-        if tele_file and 'lat_g' in df.columns:
-            ax_gg.scatter(df['lat_g'], df['accel'], c='white', s=5, alpha=0.4)
+        if uploaded and 'lat_g' in df.columns:
+            ax_gg.scatter(df['lat_g'], df['accel'], color='white', s=3, alpha=0.3)
         ax_gg.set_xlim(-mu-0.2, mu+0.2); ax_gg.set_ylim(-mu-0.2, mu+0.2)
         st.pyplot(fig_gg)
 
-with tab_lab:
-    st.header("The Digital Twin Methodology")
+with tab_science:
+    st.header("Stochastic Performance Modeling")
+    st.markdown("""
+    This agent uses **Monte Carlo Uncertainty Quantification** to model the car's potential across 400 parallel universes 
+    of environmental and mechanical variance.
+    """)
     
-    with st.expander("1. How we calculate Air Density ($rho$)"):
-        st.markdown(r"""
-        We use the **Ideal Gas Law** to determine the density of the air molecules your engine is breathing. 
-        Higher density means more oxygen for combustion, but more drag for the bodywork.
-        $$ \rho = \frac{P}{R_{specific} \cdot T} $$
-        """)
+    fig_mc, ax_mc = plt.subplots(figsize=(10, 4))
+    plt.style.use('dark_background')
+    ax_mc.hist(sim_data, bins=35, color='#ff8700', alpha=0.5, label="Simulated Runs")
+    ax_mc.axvline(mean_g, color='white', linestyle='--', label=f"Mean: {round(mean_g, 2)}G")
+    ax_mc.axvspan(mean_g - np.std(sim_data), mean_g + np.std(sim_data), color='#ff8700', alpha=0.1, label="1-Sigma Confidence")
+    ax_mc.set_title("Stochastic Probability Distribution")
+    ax_mc.legend()
+    st.pyplot(fig_mc)
 
-    with st.expander("2. The Traction-Limited Acceleration Logic"):
-        st.markdown(r"""
-        The "Ghost Line" (Digital Twin) is calculated by comparing engine force against aerodynamic drag, 
-        clamped by the maximum friction your tires can sustain ($\mu$).
-        $$ a_{limit} = \min \left( \mu, \frac{\frac{P}{v} - \frac{1}{2}\rho v^2 C_d A}{m \cdot g} \right) $$
-        """)
+    st.markdown(r"""
+    #### The Math Behind the G-Force
+    The acceleration potential is the minimum of tire friction ($\mu$) and available power force:
+    $$ a = \min \left( \mu, \frac{\frac{P}{v} - \frac{1}{2}\rho v^2 C_d A}{m \cdot g} \right) $$
+    """)
 
-    with st.expander("3. Monte Carlo Uncertainty"):
-        st.markdown("""
-        **Why 92%?** We run 500 simulations where we randomly wobble the weather and grip. 
-        If the car wins in 460 of those "Parallel Universes," your Winning Probability is 92%.
-        """)
-        fig_mc, ax_mc = plt.subplots(figsize=(8, 3))
-        ax_mc.hist(sim_data, bins=30, color='#00ff41', alpha=0.6)
-        ax_mc.set_title("Monte Carlo Probability Distribution")
-        st.pyplot(fig_mc)
+with tab_agent:
+    st.subheader("Race Engineer Comms")
+    for msg in st.session_state.chat_history:
+        with st.chat_message(msg["role"]): st.markdown(msg["content"])
 
-with tab_comms:
-    st.subheader("Gemini Live: Voice-Ready Engineer")
-    if chat_in := st.chat_input("Speak to your Crew Chief..."):
+    if p := st.chat_input("Query the Agent..."):
+        st.session_state.chat_history.append({"role": "user", "content": p})
+        with st.chat_message("user"): st.markdown(p)
+        
         with st.chat_message("assistant"):
             if GOOGLE_API_KEY:
                 genai.configure(api_key=GOOGLE_API_KEY)
                 model = genai.GenerativeModel('gemini-1.5-flash')
-                context = f"Racing Agent. Car: {power}HP. Track: {track_name}. Rho: {rho}. Input: {chat_in}."
-                st.write(model.generate_content(context).text)
-            else: st.warning("Connect API Key for Voice Agent.")
+                context = f"Role: Championship Engineer. Setup: {power}HP, {weight}kg, {rho} density. Data: {track_name}. User says: {p}"
+                resp = model.generate_content(context).text
+                st.markdown(resp)
+                st.session_state.chat_history.append({"role": "assistant", "content": resp})
+            else: st.error("AI Key Missing")
 
-with tab_social:
-    st.header("Generate Social Proof")
-    if st.button("🎨 RENDER VIRAL TELEMETRY CARD"):
-        st.markdown(f"""
-        <div class="social-card">
-            <h2 style="color:#00ff41;">ELITE RACING AGENT | MISSION REPORT</h2>
-            <p>LOCATION: {track_name.upper()}</p>
-            <h1 style="font-size: 80px; margin: 10px 0;">{win_prob}%</h1>
-            <p style="letter-spacing: 5px;">WINNING PROBABILITY</p>
-            <hr style="border-color: #333;">
-            <div style="display: flex; justify-content: space-around;">
-                <div><b>{power} HP</b><br>POWER</div>
-                <div><b>{rho}</b><br>DENSITY</div>
-                <div><b>{round(power/weight, 2)}</b><br>PWR/WGT</div>
-            </div>
-            <p style="margin-top:20px; font-style: italic; color: #888;">"Data-Validated Performance. Digital Twin Logic."</p>
-        </div>
-        """, unsafe_allow_html=True)
-
-st.markdown("---")
-st.caption("Elite-Racing-Agent v4.1 | Championship Ready | © 2026 High-Performance Labs")
+with tab_roi:
+    st.header("Component ROI Optimizer")
+    st.info("Calculate the Cost-Per-Tenth for new vehicle components.")
+    
+    c1, c2 = st.columns(2)
+    part_cost = c1.number_input("Component Cost ($)", value=5000)
+    time_gain = c2.number_input("Estimated Lap Time Gain (seconds)", value=0.15)
+    
+    if time_gain > 0:
+        cost_per_ms = part_cost / (time_gain * 1000)
+        st.metric("COST PER MILLISECOND", f"${round(cost_per_ms, 2)}")
+        if cost_per_ms < 50: st.success("Recommendation: ACQUIRE (
