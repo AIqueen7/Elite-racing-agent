@@ -32,7 +32,6 @@ if GOOGLE_API_KEY:
 
 # --- CORE PHYSICS ENGINE ---
 def calculate_digital_twin(power_hp, weight_kg, cd, rho):
-    """Calculates theoretical G-force curve vs Speed."""
     power_watts = power_hp * 745.7
     speeds_kmh = np.linspace(5, 280, 100) 
     speeds_ms = speeds_kmh / 3.6
@@ -40,7 +39,6 @@ def calculate_digital_twin(power_hp, weight_kg, cd, rho):
     
     accel_g = []
     for v in speeds_ms:
-        # F_net = (Power/v) - (0.5 * rho * v^2 * Cd * A)
         force_engine = power_watts / v
         force_drag = 0.5 * rho * (v**2) * cd * frontal_area
         net_accel_ms2 = (force_engine - force_drag) / weight_kg
@@ -60,16 +58,20 @@ with st.sidebar:
     drag_coeff = st.slider("Aero Drag (Cd)", 0.2, 0.9, 0.45)
     
     st.header("Environment")
-    city = st.text_input("Track City", "Colorado Springs")
+    # Defaulting track to Strawberry Creek Raceway
+    track_input = st.text_input("Track/City", "Strawberry Creek Raceway")
     
-    # Dynamic Air Density Calculation
     if st.button("Sync Live Weather"):
         try:
-            url = f"http://api.openweathermap.org/data/2.5/weather?q={city}&appid={WEATHER_API_KEY}&units=metric"
+            # If default track is used, we use precise coordinates for Thorsby area
+            if "Strawberry Creek" in track_input:
+                url = f"http://api.openweathermap.org/data/2.5/weather?lat=53.3377&lon=-114.1603&appid={WEATHER_API_KEY}&units=metric"
+            else:
+                url = f"http://api.openweathermap.org/data/2.5/weather?q={track_input}&appid={WEATHER_API_KEY}&units=metric"
+            
             res = requests.get(url).json()
             temp_k = res['main']['temp'] + 273.15
             press_pa = res['main']['pressure'] * 100
-            # rho = P / (R * T)
             st.session_state['rho'] = round(press_pa / (287.05 * temp_k), 4)
             st.success(f"Synced: {res['main']['temp']}°C")
         except:
@@ -106,21 +108,20 @@ with col2:
     try:
         st.image(Image.open("1000006405.png"), use_container_width=True)
     except:
-        st.warning("Upload '1000006405.png' to GitHub.")
+        st.warning("Ensure car photo is in the repo.")
 
     # Dynamic Probability Logic
     p_to_w = power / weight
-    # Penalty based on density deviation from sea level
     density_ratio = current_rho / 1.225
     prob_score = min(99, max(10, int((p_to_w * density_ratio / 0.75) * 100)))
     
-    st.metric("Winning Probability", f"{prob_score}%", f"{round(current_rho - 1.225, 2)} ρ-Delta")
+    st.metric("Winning Probability", f"{prob_score}%", f"{round(current_rho - 1.225, 3)} ρ-Delta")
 
     if GOOGLE_API_KEY:
         if st.button("Generate Strategy Brief"):
             model = genai.GenerativeModel('gemini-flash-latest')
-            prompt = f"You are a Race Engineer. Car: {power}HP, {weight}kg. Track: {city} at {current_rho} density. Prob: {prob_score}%. Give 2 tactical tips."
+            prompt = f"Professional Race Engineer tip. Car: {power}HP. Track: {track_input} ({current_rho} density). Prob: {prob_score}%. 2 short tips."
             st.info(model.generate_content(prompt).text)
 
 st.markdown("---")
-st.caption("Elite-Racing-Agent v1.1 | Developed for High-Performance Validation")
+st.caption("Elite-Racing-Agent v1.2 | Location: Strawberry Creek Raceway Optimized")
