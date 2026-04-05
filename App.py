@@ -6,7 +6,7 @@ import requests
 import google.generativeai as genai
 
 # --- 1. PRO-SPEC ARCHITECTURE ---
-st.set_page_config(page_title="Elite-Racing-Agent", page_icon="🏁", layout="wide")
+st.set_page_config(page_title="Elite-Racing-Agent | Precision Spec", page_icon="🏁", layout="wide")
 
 st.markdown("""
     <style>
@@ -20,33 +20,12 @@ st.markdown("""
 
 # --- 2. GLOBAL TRACK DATABASE ---
 TRACKS = {
-    "-- HOME & TEST --": {"lat": 53.3377, "lon": -114.1603, "alt": 2300},
     "Strawberry Creek Raceway (Home)": {"lat": 53.3377, "lon": -114.1603, "alt": 2300},
-    
-    "-- HILL CLIMB SERIES --": {"lat": 38.8405, "lon": -104.9442, "alt": 9390},
-    "Pikes Peak - Start Line": {"lat": 38.8405, "lon": -104.9442, "alt": 9390},
-    "Pikes Peak - Glen Cove": {"lat": 38.8850, "lon": -105.0110, "alt": 11440},
+    "Pikes Peak - Start": {"lat": 38.8405, "lon": -104.9442, "alt": 9390},
     "Pikes Peak - Summit": {"lat": 38.8405, "lon": -105.0445, "alt": 14115},
-    "Mount Washington Auto Road": {"lat": 44.2705, "lon": -71.3033, "alt": 6288},
-    
-    "-- EUROPEAN CLASSICS --": {"lat": 50.3341, "lon": 6.9427, "alt": 2000},
     "Nürburgring Nordschleife": {"lat": 50.3341, "lon": 6.9427, "alt": 2000},
-    "Circuit de Spa-Francorchamps": {"lat": 50.4372, "lon": 5.9714, "alt": 1400},
-    "Monaco Grand Prix": {"lat": 43.7347, "lon": 7.4206, "alt": 30},
-    "Le Mans (Circuit de la Sarthe)": {"lat": 47.9392, "lon": 0.2184, "alt": 170},
-    "Monza (Temple of Speed)": {"lat": 45.6189, "lon": 9.2812, "alt": 600},
-    
-    "-- NORTH AMERICAN STAPLES --": {"lat": 30.1328, "lon": -97.6411, "alt": 500},
-    "Laguna Seca (Corkscrew)": {"lat": 36.5841, "lon": -121.7533, "alt": 800},
-    "Road America": {"lat": 43.7975, "lon": -87.9875, "alt": 1050},
-    "Circuit of the Americas (COTA)": {"lat": 30.1328, "lon": -97.6411, "alt": 530},
-    "Watkins Glen": {"lat": 42.3369, "lon": -76.9231, "alt": 1500},
-    "Indianapolis Motor Speedway": {"lat": 39.7950, "lon": -86.2347, "alt": 715},
-    
-    "-- ASIA & OCEANIA --": {"lat": 34.8431, "lon": 136.541, "alt": 150},
-    "Suzuka Circuit": {"lat": 34.8431, "lon": 136.541, "alt": 130},
-    "Mount Panorama (Bathurst)": {"lat": -33.4475, "lon": 149.559, "alt": 2800},
-    "Fuji Speedway": {"lat": 35.3717, "lon": 138.926, "alt": 1800},
+    "Laguna Seca": {"lat": 36.5841, "lon": -121.7533, "alt": 800},
+    "Mount Panorama (Bathurst)": {"lat": -33.4475, "lon": 149.559, "alt": 2800}
 }
 
 # --- 3. PHYSICS ENGINE ---
@@ -86,12 +65,11 @@ with st.sidebar:
             st.success("Atmosphere Locked")
         except: st.error("Sensor Sync Failed")
 
-# --- 5. DATA PRE-PROCESSING (FIXES THE NAMEERROR) ---
+# --- 5. DATA PRE-PROCESSING ---
 rho = st.session_state['rho']
 v_ref = np.linspace(5, 320, 100)
 curve, cur_hp = sim_physics(hp, kg, rho, cd, mu, v_ref)
 
-# DEFINING 'f' EARLY SO IT IS VISIBLE TO THE REST OF THE CODE
 f = st.file_uploader("📂 Upload Telemetry CSV (Master Dataset)", type="csv")
 df = None
 if f:
@@ -103,25 +81,20 @@ if f:
 t1, t2, t3 = st.tabs(["📊 PERFORMANCE SUMMARY", "🧬 PHYSICS & SENSITIVITY", "🤖 CHIEF AGENT"])
 
 with t1:
-    # ROW 1: THE BIG FIVE (Jay's Eye-Catchers)
+    # ROW 1: THE BIG FIVE (Key Metrics)
     c1, c2, c3, c4, c5 = st.columns(5)
     
-    # 1. Density Altitude
     da = int((1.225 - rho) * 10000)
     c1.metric("DENSITY ALTITUDE", f"{da} ft")
     
-    # 2. Aero Crossover (When Downforce = Weight)
     v_aero = int(np.sqrt((kg * 9.81) / (0.5 * rho * (cd * 2.5) * 1.5)) * 3.6)
     c2.metric("AERO CROSSOVER", f"{v_aero} kmh", "1.0G Load")
     
-    # 3. Effective Power
     c3.metric("EFFECTIVE BHP", f"{int(cur_hp)} hp", f"{int(cur_hp - hp)} loss")
     
-    # 4. Realistic V-MAX
     vmax = int(np.cbrt((cur_hp * 745.7 * 0.85) / (0.5 * rho * cd * 1.5)) * 3.6)
     c4.metric("REAL V-MAX", f"{vmax} kmh", f"{int(vmax*0.621)} mph")
 
-    # 5. Grip Utilization
     if df is not None and 'g_sum' in df.columns:
         util = (df['g_sum'].max() / mu) * 100
         c5.metric("GRIP UTILIZATION", f"{round(util, 1)}%", "Peak vs. Limit")
@@ -131,50 +104,8 @@ with t1:
     # ROW 2: PRIMARY GRAPHS
     mc, sc = st.columns([2, 1])
     with mc:
-        st.subheader("Performance Envelope Audit")
+        st.subheader("Performance Envelope Analysis")
         fig, ax = plt.subplots(figsize=(10, 4.5)); plt.style.use('dark_background')
         ax.plot(v_ref, curve, color='#00e5ff', lw=2.5, label="Physics Twin")
         if df is not None and 'speed' in df.columns and 'accel' in df.columns:
             ax.scatter(df['speed'], df['accel'], c=df['accel'], cmap='magma', s=10, alpha=0.4, label="Session")
-        ax.set_xlabel("Speed (km/h)"); ax.set_ylabel("G-Force"); ax.legend(); st.pyplot(fig)
-
-    with sc:
-        st.subheader("G-G Friction Circle")
-        fig_gg, ax_gg = plt.subplots(figsize=(5, 5))
-        t = np.linspace(0, 2*np.pi, 100)
-        ax_gg.plot(mu*np.cos(t), mu*np.sin(t), color='#00e5ff', ls='--', alpha=0.4)
-        if df is not None and 'lat_g' in df.columns and 'accel' in df.columns:
-            ax_gg.scatter(df['lat_g'], df['accel'], color='white', s=3, alpha=0.3)
-        ax_gg.set_xlim(-mu-0.2, mu+0.2); ax_gg.set_ylim(-mu-0.2, mu+0.2); st.pyplot(fig_gg)
-
-with t2:
-    st.header("Deep Chassis Analysis")
-    g1, g2 = st.columns(2)
-    with g1:
-        st.subheader("Grip Source Correlation")
-        aero_comp = [0.5 * rho * (v/3.6)**2 * (cd * 2.0) / (kg * 9.81) for v in v_ref]
-        fig1, ax1 = plt.subplots(); plt.style.use('dark_background')
-        ax1.fill_between(v_ref, mu, color='#222', label="Mechanical Limit")
-        ax1.plot(v_ref, aero_comp, color='#00e5ff', lw=2, label="Aero Component")
-        ax1.set_xlabel("Speed"); ax1.set_ylabel("G-Potential"); ax1.legend(); st.pyplot(fig1)
-
-    with g2:
-        st.subheader("Tire Energy Budget")
-        if df is not None and 'g_sum' in df.columns:
-            energy = df['g_sum'] * df['speed']
-            fig2, ax2 = plt.subplots(); plt.style.use('dark_background')
-            ax2.plot(df.index, energy, color='#ff4b4b')
-            ax2.set_ylabel("Work (Force x Velocity)"); st.pyplot(fig2)
-        else: st.info("Upload CSV to view energy flux.")
-
-with t3:
-    q = st.chat_input("Technical inquiry...")
-    if q:
-        with st.chat_message("assistant"):
-            if st.secrets.get("GOOGLE_API_KEY"):
-                genai.configure(api_key=st.secrets.get("GOOGLE_API_KEY"))
-                m = genai.GenerativeModel('gemini-1.5-flash')
-                ctx = f"Consultant for Jay Esterer. {hp}HP. Track: {venue_key}. Query: {q}"
-                st.write(m.generate_content(ctx).text)
-
-st.caption(f"v11.0 | Auditor Spec | Track: {venue_key}")
