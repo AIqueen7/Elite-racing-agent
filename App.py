@@ -67,8 +67,8 @@ with st.sidebar:
 # --- 5. DASHBOARD CALCULATIONS ---
 sim_data = run_stochastic_sim(power, weight, rho, cd, mu)
 mean_g = np.mean(sim_data)
-stability_score = 100 - (np.std(sim_data) / mean_g * 1000)
-win_prob = int((mean_g / mu) * 100)
+stability_score = 100 - (np.std(sim_data) / (mean_g if mean_g != 0 else 1) * 100)
+win_prob = int((mean_g / mu) * 100) if mu != 0 else 0
 
 # --- 6. MISSION CONTROL UI ---
 tab_dashboard, tab_science, tab_agent, tab_roi = st.tabs(["🏎️ MISSION CONTROL", "🔬 SCIENCE LAB", "🤖 AGENT COMMS", "💰 MCLAREN ROI"])
@@ -105,4 +105,59 @@ with tab_dashboard:
         fig_gg, ax_gg = plt.subplots(figsize=(5, 5))
         circle = plt.Circle((0, 0), mu, color='#ff8700', fill=False, linestyle='--')
         ax_gg.add_artist(circle)
-        if uploaded and 'lat_g'
+        if uploaded:
+            df = pd.read_csv(uploaded)
+            if 'lat_g' in df.columns and 'accel' in df.columns:
+                ax_gg.scatter(df['lat_g'], df['accel'], color='white', s=3, alpha=0.3)
+        ax_gg.set_xlim(-mu-0.2, mu+0.2); ax_gg.set_ylim(-mu-0.2, mu+0.2)
+        st.pyplot(fig_gg)
+
+with tab_science:
+    st.header("Stochastic Performance Modeling")
+    fig_mc, ax_mc = plt.subplots(figsize=(10, 4))
+    plt.style.use('dark_background')
+    ax_mc.hist(sim_data, bins=35, color='#ff8700', alpha=0.5, label="Simulated Runs")
+    ax_mc.axvline(mean_g, color='white', linestyle='--', label=f"Mean: {round(mean_g, 2)}G")
+    ax_mc.axvspan(mean_g - np.std(sim_data), mean_g + np.std(sim_data), color='#ff8700', alpha=0.1, label="1-Sigma Confidence")
+    ax_mc.set_title("Stochastic Probability Distribution")
+    ax_mc.legend()
+    st.pyplot(fig_mc)
+
+    st.markdown(r"""
+    #### The Math Behind the G-Force
+    The acceleration potential is the minimum of tire friction ($\mu$) and available power force:
+    $$ a = \min \left( \mu, \frac{\frac{P}{v} - \frac{1}{2}\rho v^2 C_d A}{m \cdot g} \right) $$
+    """)
+
+with tab_agent:
+    st.subheader("Race Engineer Comms")
+    for msg in st.session_state.chat_history:
+        with st.chat_message(msg["role"]): st.markdown(msg["content"])
+    if p := st.chat_input("Query the Agent..."):
+        st.session_state.chat_history.append({"role": "user", "content": p})
+        with st.chat_message("user"): st.markdown(p)
+        with st.chat_message("assistant"):
+            if GOOGLE_API_KEY:
+                genai.configure(api_key=GOOGLE_API_KEY)
+                model = genai.GenerativeModel('gemini-1.5-flash')
+                context = f"Racing Engineer. Setup: {power}HP, {weight}kg, {rho} density. Track: {track_name}. User says: {p}"
+                resp = model.generate_content(context).text
+                st.markdown(resp)
+                st.session_state.chat_history.append({"role": "assistant", "content": resp})
+            else: st.error("AI Key Missing")
+
+with tab_roi:
+    st.header("Component ROI Optimizer")
+    st.info("Calculate the Cost-Per-Tenth for new vehicle components.")
+    c1, c2 = st.columns(2)
+    part_cost = c1.number_input("Component Cost ($)", value=5000)
+    time_gain = c2.number_input("Estimated Lap Time Gain (seconds)", value=0.15)
+    if time_gain > 0:
+        cost_per_ms = part_cost / (time_gain * 1000)
+        st.metric("COST PER MILLISECOND", f"${round(cost_per_ms, 2)}")
+        if cost_per_ms < 50:
+            st.success("Recommendation: ACQUIRE (High Efficiency)")
+        else:
+            st.warning("Recommendation: AUDIT (Low Efficiency Gain)")
+
+st.caption(f"Elite-Racing-Agent v5.2 | McLaren Spec | {track_name}")
