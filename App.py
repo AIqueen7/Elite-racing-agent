@@ -74,7 +74,7 @@ with tabs[1]:
     ax2.axvline(AOA[np.argmax(REWARD)], color='white', ls='--', label=f"RL Optimal: {round(AOA[np.argmax(REWARD)], 1)}°")
     ax2.set_xlabel("Wing Angle of Attack (deg)"); ax2.set_ylabel("Agent Reward Score"); ax2.legend()
     st.pyplot(fig2)
-    st.markdown("**Explanation:** The RL agent simulated 5,000 laps. It found that for your specific **Power-to-Weight**, a wing angle of **{round(AOA[np.argmax(REWARD)], 1)}°** maximizes exit traction without inducing excessive drag-stall.")
+    st.markdown("**Explanation:** The RL agent simulated 5,000 laps. It found that for your specific **Power-to-Weight**, a wing angle of {round(AOA[np.argmax(REWARD)], 1)}° maximizes exit traction without inducing excessive drag-stall.")
     
 
 with tabs[2]:
