@@ -65,7 +65,7 @@ if st.button("🚀 GENERATE AI STRATEGY BRIEF"):
     if GOOGLE_API_KEY:
         try:
             genai.configure(api_key=GOOGLE_API_KEY)
-            model = genai.GenerativeModel('gemini-1.5-flash')
+            model = genai.GenerativeModel('gemini-flash-latest')
             prompt = f"Lead Race Engineer: {power}HP at {rho} density. Track: {track_input}. Give 2 concise tactical tips for the driver."
             response = model.generate_content(prompt)
             st.markdown(f'<div class="insight-card"><b>Engineer Analysis:</b><br>{response.text}</div>', unsafe_allow_html=True)
