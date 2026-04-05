@@ -74,9 +74,14 @@ density_ratio = rho / 1.225
 prob = min(99, max(10, int((p_to_w * density_ratio / 0.75) * 100)))
 
 # Pit-Wall Status Banner Logic
-if prob > 90: status, color, msg = "🟢 SEND IT", "#00ff41", "Optimal Power-to-Weight. Grip levels high."
-elif prob > 75: status, color, msg = "🟡 CAUTION", "#ffff00", "Atmospheric drag increasing. Manage temps."
-else: status, color, msg = "🔴 BOX BOX", "#ff4b4b", "Critical Density Altitude. Power output restricted."
+# UPDATE YOUR STATUS LOGIC:
+if prob > 90: 
+    status, color, msg = "🟢 FULL PUSH", "#00ff41", "Targeting Green Sector times."
+elif prob > 75: 
+    status, color, msg = "🟡 MANAGE LOAD", "#ffff00", "Aero drag increasing. Watch temps."
+else: 
+    # This is your new "Red Section"
+    status, color, msg = "🔴 ABORT LAP", "#ff4b4b", "CRITICAL: Density Altitude too high for current setup."
 
 # --- MAIN DASHBOARD ---
 if not driver_mode:
