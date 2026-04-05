@@ -20,12 +20,33 @@ st.markdown("""
 
 # --- 2. GLOBAL TRACK DATABASE ---
 TRACKS = {
+    "-- HOME & TEST --": {"lat": 53.3377, "lon": -114.1603, "alt": 2300},
     "Strawberry Creek Raceway (Home)": {"lat": 53.3377, "lon": -114.1603, "alt": 2300},
-    "Pikes Peak - Start": {"lat": 38.8405, "lon": -104.9442, "alt": 9390},
+    
+    "-- HILL CLIMB SERIES --": {"lat": 38.8405, "lon": -104.9442, "alt": 9390},
+    "Pikes Peak - Start Line": {"lat": 38.8405, "lon": -104.9442, "alt": 9390},
+    "Pikes Peak - Glen Cove": {"lat": 38.8850, "lon": -105.0110, "alt": 11440},
     "Pikes Peak - Summit": {"lat": 38.8405, "lon": -105.0445, "alt": 14115},
+    "Mount Washington Auto Road": {"lat": 44.2705, "lon": -71.3033, "alt": 6288},
+    
+    "-- EUROPEAN CLASSICS --": {"lat": 50.3341, "lon": 6.9427, "alt": 2000},
     "Nürburgring Nordschleife": {"lat": 50.3341, "lon": 6.9427, "alt": 2000},
-    "Laguna Seca": {"lat": 36.5841, "lon": -121.7533, "alt": 800},
-    "Mount Panorama (Bathurst)": {"lat": -33.4475, "lon": 149.559, "alt": 2800}
+    "Circuit de Spa-Francorchamps": {"lat": 50.4372, "lon": 5.9714, "alt": 1400},
+    "Monaco Grand Prix": {"lat": 43.7347, "lon": 7.4206, "alt": 30},
+    "Le Mans (Circuit de la Sarthe)": {"lat": 47.9392, "lon": 0.2184, "alt": 170},
+    "Monza (Temple of Speed)": {"lat": 45.6189, "lon": 9.2812, "alt": 600},
+    
+    "-- NORTH AMERICAN STAPLES --": {"lat": 30.1328, "lon": -97.6411, "alt": 500},
+    "Laguna Seca (Corkscrew)": {"lat": 36.5841, "lon": -121.7533, "alt": 800},
+    "Road America": {"lat": 43.7975, "lon": -87.9875, "alt": 1050},
+    "Circuit of the Americas (COTA)": {"lat": 30.1328, "lon": -97.6411, "alt": 530},
+    "Watkins Glen": {"lat": 42.3369, "lon": -76.9231, "alt": 1500},
+    "Indianapolis Motor Speedway": {"lat": 39.7950, "lon": -86.2347, "alt": 715},
+    
+    "-- ASIA & OCEANIA --": {"lat": 34.8431, "lon": 136.541, "alt": 150},
+    "Suzuka Circuit": {"lat": 34.8431, "lon": 136.541, "alt": 130},
+    "Mount Panorama (Bathurst)": {"lat": -33.4475, "lon": 149.559, "alt": 2800},
+    "Fuji Speedway": {"lat": 35.3717, "lon": 138.926, "alt": 1800},
 }
 
 # --- 3. PHYSICS ENGINE ---
