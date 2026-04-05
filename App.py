@@ -42,69 +42,80 @@ vae = RacingVAE()
 with torch.no_grad():
     z = vae(input_vec).numpy()[0]
 
-# Physics Constants
+# Pre-calculating Physics Constants
 V = np.linspace(0, 350, 100)
 AOA = np.linspace(0, 25, 100)
-hz = 58 if "Titanium" in mat else 42
+hz_val = 58 if "Titanium" in mat else 42
 
 # --- 4. THE 10-TAB MASTER INTERFACE ---
 tabs = st.tabs(["🌌 LATENT", "🧬 RL", "🔥 LSTM", "🌪️ AERO", "🔊 BODE", "⚡ ENTROPY", "📈 SATURATION", "📉 PITCH", "🧠 NEURAL LOGIC", "🏗️ SUMMARY"])
 
+# TAB 0: VAE
 with tabs[0]:
     st.header("🌌 VAE Latent Manifold")
-    fig0, ax0 = plt.subplots(figsize=(10, 4)); plt.style.use('dark_background')
+    fig0, ax0 = plt.subplots(figsize=(10, 4))
+    plt.style.use('dark_background')
     grid = np.linspace(-3, 3, 50); gx, gy = np.meshgrid(grid, grid)
     ax0.contourf(gx, gy, np.exp(-(gx**2 + gy**2)/2), cmap='magma', alpha=0.8)
     ax0.scatter(z[0]*2, z[1]*2, color='#00e5ff', s=300, marker='*', label="Optimal Point")
+    ax0.set_xlabel("Latent Dimension Z1 (Mechanical)"); ax0.set_ylabel("Latent Dimension Z2 (Aero)")
     st.pyplot(fig0)
-    st.markdown(f"""
-    **Optimal Point ($O^*$):** Z=[{z[0]:.3f}, {z[1]:.3f}]
-    * **Racing Logic:** This is your **Chemical-Mechanical Pivot**. The star is where the tire’s molecular bond ($\mu$) is perfectly supported by the vertical load ($N$).
-    * **AI Logic:** This is **Dimension Reduction**. By compressing your 8D specs into a **Latent Z-Space**, we find the underlying physics DNA.
-    """)
+    st.markdown(f"**Optimal Point ($O^*$):** Z=[{z[0]:.3f}, {z[1]:.3f}] — The chemical-mechanical pivot where grip meets load.")
 
+# TAB 1: RL
 with tabs[1]:
     st.header("🧬 PPO Policy Reward Map")
-    fig1, ax1 = plt.subplots(figsize=(10, 3)); plt.style.use('dark_background')
+    fig1, ax1 = plt.subplots(figsize=(10, 3))
     reward = norm.pdf(AOA, 12 + (z[1]*3), 3) * 100
     ax1.plot(AOA, reward, color='#00ff9d', lw=4); ax1.fill_between(AOA, reward, color='#00ff9d', alpha=0.2)
+    ax1.set_xlabel("Wing Angle of Attack (Degrees)"); ax1.set_ylabel("Reward Probability (%)")
     st.pyplot(fig1)
-    st.markdown("""
-    * **Racing Logic:** This finds the **'Sweet Spot'** for your wing. Too flat, and you wash out; too steep, and drag kills your speed.
-    * **AI Logic:** This is a **Policy Gradient**. The RL agent explores the 'Action Space' (Wing AoA) and calculates the **Advantage Estimate**—where the AI 'believes' the most speed is hidden.
-    """)
 
+# TAB 4: BODE
 with tabs[4]:
     st.header("🔊 Bode Phasing (Harmonics)")
-    fig4, ax4 = plt.subplots(figsize=(10, 3)); plt.style.use('dark_background')
-    f = np.linspace(0, 200, 200); amp = (1 / (1 + (18 * (f/hz - hz/f))**2)) * 10
-    ax4.plot(f, amp, color='#00e5ff', lw=2); st.pyplot(fig4)
-    st.markdown(f"""
-    * **Racing Logic:** For **{mat}** uprights, this is the 'Chatter Map.' It shows the **Resonant Frequency** where the suspension becomes a tuning fork.
-    * **AI Logic:** **Structural Frequency Analysis**. We use neural logic to predict the material's **Harmonic Node** based on the Young's Modulus.
-    """)
+    fig4, ax4 = plt.subplots(figsize=(10, 3))
+    f_axis = np.linspace(0, 200, 200)
+    amp = (1 / (1 + (18 * (f_axis/hz_val - hz_val/f_axis))**2)) * 10
+    ax4.plot(f_axis, amp, color='#00e5ff', lw=2)
+    ax4.set_xlabel("Frequency (Hz)"); ax4.set_ylabel("Amplitude Ratio")
+    st.pyplot(fig4)
 
+# TAB 8: NEURAL LOGIC
 with tabs[8]:
-    st.header("🧠 Neural Stack Architecture")
-    st.write("### Inference Engine Design")
+    st.header("🧠 Neural Stack & Optimal Point Logic")
     st.markdown("""
-    1. **VAE (Variational Autoencoder):** Used for **Manifold Learning**. We compress high-dimensional chaos into a 2D map. 
-    2. **PPO (Proximal Policy Optimization):** This is the **Policy Gradient**. The AI simulates thousands of laps to find the probability peak of your aero configuration.
-    3. **LSTM (Long Short-Term Memory):** Used for **Temporal Dependencies**. It 'remembers' previous heat states to predict future tire degradation.
+    ### 1. VAE: Manifold Learning
+    * **Racing:** Maps the **Chemical-Mechanical Pivot**. The star is where the tire’s molecular bond ($\mu$) is perfectly supported by vertical load ($N$).
+    * **AI:** **Dimension Reduction**. Compressing 8D specs into a **Latent Z-Space** to find the underlying physics DNA.
+    
+
+    ### 2. PPO: Policy Gradient RL
+    * **Racing:** Finds the **'Sweet Spot'** for the wing. Balancing cornering wash-out against terminal drag.
+    * **AI:** The RL agent explores the 'Action Space' (AoA) to calculate the **Advantage Estimate**.
+    
+
+[Image of reinforcement learning agent-environment loop]
+
+
+    ### 3. Bode Phasing
+    * **Racing:** For **Titanium Grade 5**, identifies the **Resonant Frequency** where the suspension becomes a tuning fork.
+    * **AI:** **Structural Frequency Analysis** based on material Young's Modulus and neural prediction.
+    
     """)
 
+# TAB 9: SUMMARY
 with tabs[9]:
     st.header("🏗️ Executive Engineering Summary")
     c1, c2 = st.columns(2)
     with c1:
-        st.subheader("🏁 Physics Performance")
-        st.metric("Resonant Node", f"{hz} Hz")
+        st.subheader("🏁 Performance Targets")
+        st.metric("Bode Node", f"{hz_val} Hz")
         st.metric("Latent O*", f"{z[0]:.2f}, {z[1]:.2f}")
-        st.write(f"**Structural Core:** {mat} Uprights.")
     with c2:
         st.subheader("⚖️ AI Calibration")
         st.write("🟠 **Phase 1 (Synthetic):** ACTIVE")
         st.write("🔴 **Phase 2 (Telemetry):** AWAITING DATA")
-        st.info("Input telemetry (.csv) to tune neural weights to your driving style.")
+        st.info("Ingest .csv telemetry to recalibrate weights to your driving style.")
 
 st.caption("Elite-Racing-Agent | Sovereign Architect | Full Neural Integration")
