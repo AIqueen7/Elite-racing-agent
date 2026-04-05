@@ -20,57 +20,71 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- 2. ADVANCED PHYSICS ENGINE (SUMMIT SPEC) ---
+# --- 2. THE TRACK DATABASE ---
+# Coordinates and Base Altitudes for precise atmospheric modeling
+TRACK_DB = {
+    "Strawberry Creek Raceway (Home)": {"lat": 53.3377, "lon": -114.1603, "base_alt": 2300},
+    "Pikes Peak - Start Line": {"lat": 38.8405, "lon": -104.9442, "base_alt": 9390},
+    "Pikes Peak - Glen Cove": {"lat": 38.8850, "lon": -105.0110, "base_alt": 11440},
+    "Pikes Peak - Summit": {"lat": 38.8405, "lon": -105.0445, "base_alt": 14115},
+    "Mount Washington Auto Road": {"lat": 44.2705, "lon": -71.3033, "base_alt": 6288},
+    "Custom / Other": {"lat": 0, "lon": 0, "base_alt": 0}
+}
+
+# --- 3. ADVANCED PHYSICS ENGINE ---
 def get_altitude_power_factor(rho):
-    """Calculates power loss. 1.225 is sea level density."""
-    return (rho / 1.225) ** 0.7 # Turbocharged engines regain some but still lose efficiency
+    return (rho / 1.225) ** 0.7 
 
 def simulate_dynamics(power, weight, rho, cd, mu, v_range):
     v_ms = v_range / 3.6
-    # Adjusted Power for Altitude
     effective_hp = power * get_altitude_power_factor(rho)
     p_watts = effective_hp * 745.7
     
     accel_gs = []
     for v in v_ms:
-        if v < 1: v = 1 # Avoid division by zero
+        if v < 1: v = 1 
         drag = 0.5 * rho * (v**2) * cd * 1.5
-        rolling_res = weight * 9.81 * 0.015 # Friction of tires on tarmac
-        force_avail = (p_watts / v) * 0.85 # 15% Drivetrain loss
+        rolling_res = weight * 9.81 * 0.015 
+        force_avail = (p_watts / v) * 0.85 
         
         net_force = force_avail - drag - rolling_res
         net_g = net_force / (weight * 9.81)
         accel_gs.append(max(min(net_g, mu), -mu))
     return accel_gs, effective_hp
 
-# --- 3. INPUTS ---
-GOOGLE_API_KEY = st.secrets.get("GOOGLE_API_KEY", "")
-WEATHER_API_KEY = st.secrets.get("OPENWEATHER_API_KEY", "")
+# --- 4. SIDEBAR & LOCATION SELECTION ---
 if 'rho' not in st.session_state: st.session_state['rho'] = 1.225
 
 with st.sidebar:
-    st.title("🏔️ SUMMIT CONFIG")
-    track_id = st.text_input("Venue", "Strawberry Creek / Pikes Peak")
+    st.title("🏔️ MISSION PARAMETERS")
     
-    with st.expander("Mechanical DNA", expanded=True):
+    # THE DROPDOWN
+    selected_venue = st.selectbox("Select Mission Location", list(TRACK_DB.keys()))
+    venue_data = TRACK_DB[selected_venue]
+    
+    with st.expander("Chassis & Aero DNA", expanded=True):
         base_power = st.number_input("Sea Level BHP", 100, 2500, 600)
         mass = st.number_input("Race Mass (kg)", 500, 3000, 850)
         mu_static = st.slider("Mechanical Grip (μ)", 0.5, 2.5, 1.4)
         drag_coeff = st.slider("Aero Drag (Cd)", 0.20, 1.20, 0.45)
 
     if st.button("SYNC ATMOSPHERICS"):
-        try:
-            url = f"http://api.openweathermap.org/data/2.5/weather?lat=53.3377&lon=-114.1603&appid={WEATHER_API_KEY}&units=metric"
-            res = requests.get(url).json()
-            temp_k = res['main']['temp'] + 273.15
-            st.session_state['rho'] = round((res['main']['pressure']*100) / (287.05 * temp_k), 4)
-        except: st.error("Sensor Offline")
+        if selected_venue != "Custom / Other":
+            try:
+                url = f"http://api.openweathermap.org/data/2.5/weather?lat={venue_data['lat']}&lon={venue_data['lon']}&appid={st.secrets.get('OPENWEATHER_API_KEY')}&units=metric"
+                res = requests.get(url).json()
+                temp_k = res['main']['temp'] + 273.15
+                st.session_state['rho'] = round((res['main']['pressure']*100) / (287.05 * temp_k), 4)
+                st.success(f"Atmospheric sync complete for {selected_venue}")
+            except: st.error("Sensor Sync Offline - Check API Key")
+        else:
+            st.warning("Please input manual data for custom locations.")
 
 rho = st.session_state['rho']
 v_ref = np.linspace(5, 300, 100)
 digital_twin, current_bhp = simulate_dynamics(base_power, mass, rho, drag_coeff, mu_static, v_ref)
 
-# --- 4. DASHBOARD ---
+# --- 5. DASHBOARD ---
 tab_telemetry, tab_pikes_peak, tab_engineer = st.tabs(["📊 LIVE TELEMETRY", "🧬 ALTITUDE DYNAMICS", "🤖 CHIEF ENGINEER"])
 
 with tab_telemetry:
@@ -79,14 +93,15 @@ with tab_telemetry:
     c1.metric("DENSITY ALTITUDE", f"{da} ft")
     c2.metric("EFFECTIVE BHP", f"{int(current_bhp)}")
     c3.metric("AIR DENSITY", f"{rho}")
-    # Realistic Top Speed Calculation (Where Drag == Thrust)
+    
+    # Real-world top speed (Cubic root accounts for power vs drag exponential)
     top_speed = int(np.cbrt((current_bhp * 745.7 * 0.85) / (0.5 * rho * drag_coeff * 1.5)) * 3.6)
     c4.metric("REALISTIC V-MAX", f"{top_speed} km/h")
 
     main_c, side_c = st.columns([2, 1])
     
     with main_c:
-        st.subheader("Performance Envelope: Acceleration potential")
+        st.subheader(f"Performance Envelope: {selected_venue}")
         fig, ax = plt.subplots(figsize=(10, 4.5))
         plt.style.use('dark_background')
         ax.plot(v_ref, digital_twin, color='#00e5ff', linewidth=2, label="Theoretical Limit")
@@ -104,40 +119,4 @@ with tab_telemetry:
         theta = np.linspace(0, 2*np.pi, 100)
         ax_gg.plot(mu_static*np.cos(theta), mu_static*np.sin(theta), color='#00e5ff', linestyle='--', alpha=0.5)
         
-        if file and 'lat_g' in df.columns and 'accel' in df.columns:
-            ax_gg.scatter(df['lat_g'], df['accel'], color='white', s=3, alpha=0.4)
-            # G-Sum utilization calculation
-            g_sum = np.sqrt(df['lat_g']**2 + df['accel']**2).mean()
-            st.write(f"Mean Grip Usage: {round((g_sum/mu_static)*100,1)}%")
-            
-        ax_gg.set_xlim(-mu_static-0.2, mu_static+0.2); ax_gg.set_ylim(-mu_static-0.2, mu_static+0.2)
-        ax_gg.set_xlabel("Lat G"); ax_gg.set_ylabel("Long G")
-        st.pyplot(fig_gg)
-
-with tab_pikes_peak:
-    st.header("Altitude Sensitivity Analysis")
-    # Simulate climb from Sea Level to 14,000ft
-    altitudes = np.linspace(0, 14000, 50)
-    densities = 1.225 * np.exp(-altitudes / 30000)
-    power_curve = [base_power * get_altitude_power_factor(d) for d in densities]
-    
-    fig_climb, ax_climb = plt.subplots(figsize=(10, 4))
-    ax_climb.plot(altitudes, power_curve, color='#ff4b4b', linewidth=3)
-    ax_climb.set_title("Power Attrition vs. Altitude (The Hill Climb Tax)")
-    ax_climb.set_xlabel("Altitude (ft)"); ax_climb.set_ylabel("Available BHP")
-    st.pyplot(fig_climb)
-    
-    st.info("Turbocharged Unlimited cars typically lose ~1-2% power per 1,000ft, whereas naturally aspirated cars lose ~3-4%.")
-
-with tab_engineer:
-    st.subheader("Engineering Query Console")
-    if query := st.chat_input("Ask about chassis set-up or aero..."):
-        with st.chat_message("assistant"):
-            if GOOGLE_API_KEY:
-                genai.configure(api_key=GOOGLE_API_KEY)
-                model = genai.GenerativeModel('gemini-1.5-flash')
-                context = f"Consulting for Jay Esterer, 40-yr driver. Car: {base_power}HP, {mass}kg. Setup: Unlimited Class. Query: {query}"
-                st.write(model.generate_content(context).text)
-            else: st.error("AI Key Missing")
-
-st.caption("Elite-Racing-Agent v8.0 | Summit Spec | Optimized for Strawberry Creek Performance")
+        if file and 'lat_g' in df.columns and 'acc
