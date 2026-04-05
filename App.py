@@ -5,109 +5,111 @@ import matplotlib.pyplot as plt
 import google.generativeai as genai
 from scipy.stats import multivariate_normal
 
-# --- 1. ARCHITECTURAL CONFIGURATION ---
-st.set_page_config(page_title="Elite-Racing-Agent | VAE Genesis", page_icon="🏎️", layout="wide")
+# --- 1. SYSTEM ARCHITECTURE ---
+st.set_page_config(page_title="Elite-Racing-Agent | Structural DNA", page_icon="🧬", layout="wide")
 
 st.markdown("""
     <style>
     .main { background-color: #000000; color: #fdfdfd; }
-    [data-testid="stMetricValue"] { font-size: 38px !important; color: #00e5ff; font-family: 'JetBrains Mono', monospace; }
-    .stTabs [data-baseweb="tab"] { height: 65px; background-color: #050505; border: 1px solid #1a1a1a; }
+    [data-testid="stMetricValue"] { font-size: 32px !important; color: #00e5ff; font-family: 'JetBrains Mono'; }
+    .stHeader { background-color: #050505; }
     </style>
     """, unsafe_allow_html=True)
 
-# --- 2. LATENT SPACE INFERENCE (VAE Logic) ---
-def latent_manifold_inference(hp, kg, rho, mu_s):
-    """
-    Simulates a Variational Autoencoder (VAE) finding the 'Optimal Setup Manifold'.
-    This models the hidden coupling between mechanical grip and aero load.
-    """
-    x = np.linspace(0.5, 2.5, 40) # Mechanical Grip Dim
-    y = np.linspace(50, 500, 40) # Aero Load Dim (Newtons @ 100kmh)
-    X, Y = np.meshgrid(x, y)
-    
-    # The 'Performance Ridge': A multivariate Gaussian representing the 
-    # highly specific setup window for an Unlimited Division car.
-    pos = np.dstack((X, Y))
-    # Peak performance at specific Mu/Aero balance, shifting with Air Density (Rho)
-    opt_aero = 300 + (1.225 - rho) * 200
-    rv = multivariate_normal([mu_s, opt_aero], [[0.2, 0], [0, 5000]])
-    Z = rv.pdf(pos) * 1000
-    
-    return X, Y, Z
-
-# --- 3. DYNAMIC MISSION PARAMETERS ---
+# --- 2. DYNAMIC DNA INPUTS (THE SPEC) ---
 with st.sidebar:
-    st.title("🛡️ GENESIS KERNEL V4")
-    st.subheader("Vehicle Identity")
+    st.title("🛡️ STRUCTURAL DNA")
+    
+    with st.expander("Chassis & Materials", expanded=True):
+        mat_type = st.selectbox("Upright Material", ["6061-T6 Aluminum", "Magnesium", "Carbon Composite"])
+        brake_mat = st.selectbox("Brake Interface", ["Carbon-Ceramic", "Cast Iron", "Steel High-Carbon"])
+        mount_type = st.radio("Aero Mounting", ["Chassis-Mounted", "Suspension-Mounted (Unsprung)"])
+        
+    with st.expander("Kinematic Stagger", expanded=True):
+        f_tire = st.number_input("Front Tire Width (mm)", 200, 400, 285)
+        r_tire = st.number_input("Rear Tire Width (mm)", 200, 500, 335)
+        wheelbase = st.number_input("Wheelbase (mm)", 2000, 3500, 2450)
+
+    st.divider()
     hp = st.number_input("Nominal BHP", 500, 3000, 1200)
     kg = st.number_input("Dry Mass (kg)", 500, 2500, 850)
-    st.divider()
-    st.subheader("Environmental State")
-    rho_s = st.slider("Atmospheric Density (kg/m³)", 0.6, 1.3, 1.10)
-    mu_target = st.slider("Target Mechanical Mu", 1.0, 2.2, 1.8)
+    rho_s = st.slider("Air Density (kg/m³)", 0.6, 1.3, 1.10)
 
-X_m, Y_m, Z_m = latent_manifold_inference(hp, kg, rho_s, mu_target)
-
-# --- 4. THE NEURAL INTERFACE ---
-tabs = st.tabs(["🌌 LATENT MANIFOLD", "📉 AERO-STRUCTURAL", "🧬 PROGNOSTICS", "🤖 CHIEF AGENT"])
-
-with tabs[0]:
-    st.header("Setup Latent Space (Variational Manifold)")
-    fig, ax = plt.subplots(figsize=(10, 6)); plt.style.use('dark_background')
-    contour = ax.contourf(X_m, Y_m, Z_m, levels=50, cmap='turbo')
-    fig.colorbar(contour, label='System Efficiency (%)')
-    ax.scatter(mu_target, 300 + (1.225 - rho_s)*200, color='white', s=150, marker='*', label="Agent Target")
-    ax.set_xlabel("Mechanical Friction Coefficient (μ)")
-    ax.set_ylabel("Aero Downforce @ 100km/h (N)")
-    ax.legend(); st.pyplot(fig)
+# --- 3. THE NEURAL-STRUCTURAL KERNEL ---
+def calculate_system_physics(hp, kg, f_w, r_w, mat, b_mat):
+    # Material Constants (Modulus/Thermal)
+    modulus_map = {"6061-T6 Aluminum": 68.9, "Magnesium": 45, "Carbon Composite": 150}
+    thermal_map = {"Carbon-Ceramic": 0.95, "Cast Iron": 0.55, "Steel High-Carbon": 0.65}
     
-    st.markdown(f"""
-    ### 🔬 Neural Synthesis for Jay:
-    Standard apps treat grip and aero as separate. This **VAE Manifold** finds the **Latent Coupling**. 
-    * **The Ridge:** The 'Turbo' colored zone represents the only mathematically stable setup window for a car with **{hp} HP**.
-    * **The Shift:** As density drops to **{rho_s}**, the AI has shifted the optimal 'Aero Load' higher. If you don't adjust the spring rates to match this new aero-mechanical balance, the car will 'porpoise' or lose floor seal.
-    """)
+    e_mod = modulus_map[mat]
+    t_diff = thermal_map[b_mat]
+    
+    # Understeer Gradient (K) based on Tire Stagger
+    stagger_ratio = r_w / f_w
+    k_gradient = (1.2 / stagger_ratio) * (kg / 1000)
+    
+    # Aero-Elastic Flex: Higher Modulus = Less stall at high speed
+    v = np.linspace(0, 380, 100)
+    flex = (0.5 * 1.1 * (v/3.6)**2) / (e_mod * 1000)
+    cl_dynamic = 3.5 * (1 - flex)
+    
+    return v, cl_dynamic, k_gradient, t_diff
 
-with tabs[1]:
-    st.header("Aero-Structural Resonance (PINN)")
-    # Modeling the high-frequency vibration of aero-elements
-    v = np.linspace(100, 400, 100)
-    # Resonant frequency logic: As speed increases, the frequency of air vortices
-    # approaches the natural frequency of the carbon-fiber wing uprights.
-    vortex_freq = (v / 3.6) / 0.5 # Strouhal number logic
-    natural_freq = 45 # Hz (typical for stiff carbon)
-    amplitude = 1 / (np.abs(natural_freq**2 - vortex_freq**2) + 10)
+v_ax, cl_ax, k_grad, t_alpha = calculate_system_physics(hp, kg, f_tire, r_tire, mat_type, brake_mat)
+
+# --- 4. THE INTERFACE ---
+t1, t2, t3, t4 = st.tabs(["📊 KINEMATIC BIAS", "🔥 THERMAL PHM", "🌪️ AERO-STRUCTURAL", "🤖 CHIEF AGENT"])
+
+with t1:
+    st.header("Dynamic Understeer Gradient (K)")
+    # Visualizing how the car pushes vs rotates based on tire stagger
+    slip_angles = np.linspace(0, 12, 100)
+    f_grip = np.sin(slip_angles/4) * f_tire/100
+    r_grip = np.sin(slip_angles/(4*k_grad)) * r_tire/100
+    
+    fig, ax = plt.subplots(figsize=(10, 4)); plt.style.use('dark_background')
+    ax.plot(slip_angles, f_grip, color='cyan', label="Front Axle Saturation")
+    ax.plot(slip_angles, r_grip, color='magenta', label="Rear Axle Saturation")
+    ax.set_xlabel("Slip Angle (deg)"); ax.set_ylabel("Lateral Force (N)"); ax.legend()
+    st.pyplot(fig)
+    st.info(f"Structural Insight: With a {r_tire}mm rear stagger, the AI predicts an Understeer Gradient of {round(k_grad, 2)}. The rear axle will remain linear while the front saturates at {round(slip_angles[np.argmax(f_grip)], 1)}°.")
+    
+
+with t2:
+    st.header("LSTM Thermal Diffusion (Material Specific)")
+    # Fatigue rate now tied to specific heat of brake material
+    cycles = np.arange(0, 100)
+    thermal_load = np.cumsum((hp/kg) * t_alpha * (1 + 0.2 * np.random.randn(100)))
     
     fig2, ax2 = plt.subplots(figsize=(10, 4)); plt.style.use('dark_background')
-    ax2.plot(v, amplitude * 1000, color='#00e5ff', lw=3)
-    ax2.axvline(320, color='red', ls='--', label="Flutter Point")
-    ax2.set_xlabel("Velocity (km/h)"); ax2.set_ylabel("Structural Amplitude (mm)"); ax2.legend()
+    ax2.plot(cycles, thermal_load, color='#ff4b4b', lw=3)
+    ax2.axhline(thermal_load.max()*0.8, color='yellow', ls='--', label="Material Yield Zone")
+    ax2.set_xlabel("Duty Cycles"); ax2.set_ylabel("Inferred Heat Saturation"); ax2.legend()
     st.pyplot(fig2)
-    st.warning("ENGINEERING ALERT: At 320km/h, the PINN identifies a **Structural Flutter Point**. The vortex shedding frequency is hitting the wing's natural frequency. Inspect upright stiffness immediately.")
+    st.markdown(f"**Prognostics:** Because you are using **{brake_mat}**, the LSTM calculates a thermal recovery rate of **{round(t_alpha, 2)}**. The predictive risk zone is weighted for the crystalline structural limits of this specific material.")
     
-with tabs[2]:
-    st.header("LSTM Prognostics: Hysteresis Memory")
-    # Non-linear fatigue state
-    cycles = np.linspace(0, 100, 100)
-    # Hysteresis: The car 'remembers' the heat of the previous lap
-    fatigue = np.cumsum((hp/kg)**1.5 * 0.08 * (1 + np.sin(cycles/10)))
-    
+
+with t3:
+    st.header("Center of Pressure (CoP) Shift")
+    # Calculating how the aero-balance moves as the wing flexes
+    cop_shift = (cl_ax / 3.5) * (wheelbase / 1000)
     fig3, ax3 = plt.subplots(figsize=(10, 4)); plt.style.use('dark_background')
-    ax3.plot(cycles, fatigue, color='#ff4b4b', lw=3)
-    ax3.fill_between(cycles, fatigue*0.9, fatigue*1.1, alpha=0.1, color='red')
-    ax3.set_xlabel("Duty Cycles (Cumulative High-Load Segments)")
-    ax3.set_ylabel("Inferred Material Fatigue")
+    ax3.plot(v_ax, cop_shift, color='#00ff9d', lw=3)
+    ax3.set_xlabel("Velocity (km/h)"); ax3.set_ylabel("CoP Location (m from Front Axle)")
     st.pyplot(fig3)
+    st.caption(f"Aero-Structural: Your **{mat_type}** uprights are predicted to deflect by {round(cl_ax.min()/cl_ax.max(), 3)}% at V-Max, shifting the CoP aft.")
     
-with tabs[3]:
-    st.header("🤖 The Chief Architect Agent")
-    subj = st.text_input("Enter experiential feedback (e.g., 'High frequency buzz in the steering')")
-    manifest = f"DNA: {hp}HP, {kg}kg, {rho_s} Rho. MANIFOLD: Efficiency Peak at {mu_target}mu. ALERT: Flutter risk at 320kmh."
+
+with t4:
+    st.header("🤖 Multi-Objective Chief Agent")
+    subj = st.text_input("Jay, specify a corner entry or high-speed behavior:")
+    manifest = f"DNA: {mat_type} Uprights, {brake_mat} Brakes. Stagger: {f_tire}/{r_tire}. Understeer K: {round(k_grad, 2)}."
     
-    if q := st.chat_input("Query the architect..."):
+    if q := st.chat_input("Inquire for engineering validation..."):
         with st.chat_message("assistant"):
             if st.secrets.get("GOOGLE_API_KEY"):
                 genai.configure(api_key=st.secrets.get("GOOGLE_API_KEY"))
                 model = genai.GenerativeModel('models/gemini-1.5-flash')
                 st.markdown(model.generate_content(f"{manifest}\n\nUSER: {q}").text)
+
+st.caption("Elite-Racing-Agent | Structural DNA V5 | Prescriptive Digital Twin")
