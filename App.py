@@ -163,7 +163,7 @@ with tabs[3]:
         with st.chat_message("assistant"):
             if st.secrets.get("GOOGLE_API_KEY"):
                 genai.configure(api_key=st.secrets.get("GOOGLE_API_KEY"))
-                m = genai.GenerativeModel('gemini-1.5-flash')
+                m = genai.GenerativeModel('gemini-flash-latest')
                 st.markdown(m.generate_content(f"{agent_ctx}\n\nQUERY: {q}").text)
 
 st.caption(f"Elite-Racing-Agent Architect Spec | Mission: {venue}")
