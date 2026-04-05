@@ -29,14 +29,12 @@ def get_accel_curve(power, weight, rho, cd, mu, v_range):
     v_ms = v_range / 3.6
     p_watts = power * 745.7
     frontal_area = 1.5
-    # a = min(mu, (P/v - 0.5 * rho * v^2 * Cd * A) / (m * g))
     return [min(((p_watts/v) - (0.5*rho*v**2*cd*frontal_area)) / (weight*9.81), mu) for v in v_ms]
 
 def run_monte_carlo(power, weight, rho, cd, mu, iterations=500):
     """Simulates 500 laps with variable environmental noise."""
     results = []
     for _ in range(iterations):
-        # Add 5% Gaussian noise to grip and air density
         noisy_rho = np.random.normal(rho, rho * 0.05)
         noisy_mu = np.random.normal(mu, mu * 0.05)
         curve = get_accel_curve(power, weight, noisy_rho, cd, noisy_mu, np.array([100]))
@@ -71,11 +69,9 @@ tab_mission, tab_lab, tab_comms, tab_social = st.tabs(["🚀 MISSION CONTROL", "
 rho = st.session_state['rho']
 
 with tab_mission:
-    # --- PRO-DRIVER DASHBOARD ---
     st.markdown(f"### Current Mission: {track_name}")
     col1, col2, col3, col4 = st.columns(4)
     
-    # Monte Carlo Winning Prob
     sim_data = run_monte_carlo(power, weight, rho, cd, mu)
     win_prob = int(np.mean(sim_data) * 100 / mu)
     
@@ -87,26 +83,24 @@ with tab_mission:
     c_main, c_side = st.columns([2, 1])
     
     with c_main:
-        st.subheader("Ghost Heatmap: Delta to Twin")
-        # Visualizing the Performance Gap
+        st.subheader("Performance Gap Analysis")
         v_range = np.linspace(10, 250, 100)
         target_curve = get_accel_curve(power, weight, rho, cd, mu, v_range)
         
         fig, ax = plt.subplots(figsize=(10, 4))
         plt.style.use('dark_background')
-        ax.plot(v_range, target_curve, color='#00ff41', linewidth=3, label="Ghost (Target)")
+        ax.plot(v_range, target_curve, color='#00ff41', linewidth=3, label="Digital Twin")
         
-        tele_file = st.file_uploader("Upload Telemetry + Biometrics CSV", type="csv")
+        tele_file = st.file_uploader("Upload Telemetry CSV", type="csv")
         if tele_file:
             df = pd.read_csv(tele_file)
             if 'speed' in df.columns and 'accel' in df.columns:
-                # HEATMAP: Color points by HR if available, else by accel
                 color_val = df['hr'] if 'hr' in df.columns else df['accel']
                 cmap = 'spring' if 'hr' in df.columns else 'viridis'
                 scatter = ax.scatter(df['speed'], df['accel'], c=color_val, cmap=cmap, s=15, alpha=0.7)
                 plt.colorbar(scatter, label="HR (BPM)" if 'hr' in df.columns else "Actual G")
         
-        ax.set_ylim(0, mu+0.2); ax.set_xlabel("Speed (km/h)"); ax.set_ylabel("G-Force")
+        ax.set_ylim(0, mu+0.2); ax.set_xlabel("Speed (km/h)"); ax.set_ylabel("Longitudinal G")
         st.pyplot(fig)
 
     with c_side:
@@ -120,35 +114,27 @@ with tab_mission:
         st.pyplot(fig_gg)
 
 with tab_lab:
-    # --- EXPLAINING THE SCIENCE ---
     st.header("The Digital Twin Methodology")
     
-    with st.expander("1. How we calculate Air Density ($\rho$)"):
+    with st.expander("1. How we calculate Air Density ($rho$)"):
         st.markdown(r"""
         We use the **Ideal Gas Law** to determine the density of the air molecules your engine is breathing. 
         Higher density means more oxygen for combustion, but more drag for the bodywork.
         $$ \rho = \frac{P}{R_{specific} \cdot T} $$
-        *Where:* $P$ is pressure (Pa), $T$ is absolute temperature (K), and $R$ is the gas constant for dry air.
         """)
-        
-
-[Image of air density vs altitude chart]
-
 
     with st.expander("2. The Traction-Limited Acceleration Logic"):
         st.markdown(r"""
         The "Ghost Line" (Digital Twin) is calculated by comparing engine force against aerodynamic drag, 
         clamped by the maximum friction your tires can sustain ($\mu$).
         $$ a_{limit} = \min \left( \mu, \frac{\frac{P}{v} - \frac{1}{2}\rho v^2 C_d A}{m \cdot g} \right) $$
-        If your telemetry dots are below the green line, you are leaving time on the table through "Driving Delta" or mechanical inefficiency.
         """)
 
     with st.expander("3. Monte Carlo Uncertainty"):
         st.markdown("""
-        **Why 92%?** We don't just guess. We run 500 simulations where we randomly wobble the weather and grip. 
-        If the car wins in 460 of those 500 "Parallel Universes," your Winning Probability is 92%.
+        **Why 92%?** We run 500 simulations where we randomly wobble the weather and grip. 
+        If the car wins in 460 of those "Parallel Universes," your Winning Probability is 92%.
         """)
-        # Plotting the MC Histogram
         fig_mc, ax_mc = plt.subplots(figsize=(8, 3))
         ax_mc.hist(sim_data, bins=30, color='#00ff41', alpha=0.6)
         ax_mc.set_title("Monte Carlo Probability Distribution")
@@ -156,7 +142,6 @@ with tab_lab:
 
 with tab_comms:
     st.subheader("Gemini Live: Voice-Ready Engineer")
-    # Simulation of the AI Chat Agent
     if chat_in := st.chat_input("Speak to your Crew Chief..."):
         with st.chat_message("assistant"):
             if GOOGLE_API_KEY:
@@ -167,7 +152,6 @@ with tab_comms:
             else: st.warning("Connect API Key for Voice Agent.")
 
 with tab_social:
-    # --- VIRAL SUMMARY GENERATOR ---
     st.header("Generate Social Proof")
     if st.button("🎨 RENDER VIRAL TELEMETRY CARD"):
         st.markdown(f"""
@@ -185,7 +169,6 @@ with tab_social:
             <p style="margin-top:20px; font-style: italic; color: #888;">"Data-Validated Performance. Digital Twin Logic."</p>
         </div>
         """, unsafe_allow_html=True)
-        st.info("Screenshot this card to share your technical validation with the community!")
 
 st.markdown("---")
-st.caption("Elite-Racing-Agent v4.0 | Championship Ready | © 2026 High-Performance Labs")
+st.caption("Elite-Racing-Agent v4.1 | Championship Ready | © 2026 High-Performance Labs")
