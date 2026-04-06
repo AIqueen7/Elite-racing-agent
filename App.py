@@ -1,242 +1,118 @@
-# path: app.py
+# path: rl_agent.py
 
-import streamlit as st
-import numpy as np
-import pandas as pd
-import matplotlib.pyplot as plt
 import torch
 import torch.nn as nn
+import torch.optim as optim
+import numpy as np
 
 # -------------------------------
-# 1. MODELS
+# 1. ENVIRONMENT
 # -------------------------------
 
-class RacingVAE(nn.Module):
-    def __init__(self, input_dim=12, latent_dim=2):
+class RacingEnv:
+    def __init__(self, df):
+        self.df = df.reset_index(drop=True)
+        self.max_step = len(df) - 1
+        self.reset()
+
+    def reset(self):
+        self.step_idx = 0
+        return self._get_state()
+
+    def _get_state(self):
+        row = self.df.iloc[self.step_idx]
+        return np.array([
+            row['vehicle_speed'],
+            row['Brake_Pressure'],
+            row['tire_energy'],
+            row['long_acc'],
+            row['slip_Wheel_Speed_FL']
+        ], dtype=np.float32)
+
+    def step(self, action):
+        throttle, brake = action
+
+        row = self.df.iloc[self.step_idx]
+
+        # reward shaping
+        speed_reward = row['vehicle_speed']
+        stability_penalty = abs(row['slip_Wheel_Speed_FL']) * 50
+        thermal_penalty = row['tire_energy'] * 0.001
+
+        reward = speed_reward - stability_penalty - thermal_penalty
+
+        self.step_idx += 1
+        done = self.step_idx >= self.max_step
+
+        return self._get_state(), reward, done, {}
+
+# -------------------------------
+# 2. PPO NETWORK
+# -------------------------------
+
+class ActorCritic(nn.Module):
+    def __init__(self, state_dim=5, action_dim=2):
         super().__init__()
-        self.encoder = nn.Sequential(
-            nn.Linear(input_dim, 64), nn.GELU(),
-            nn.Linear(64, 32), nn.GELU(),
-            nn.Linear(32, latent_dim)
+
+        self.actor = nn.Sequential(
+            nn.Linear(state_dim, 64), nn.ReLU(),
+            nn.Linear(64, 64), nn.ReLU(),
+            nn.Linear(64, action_dim),
+            nn.Tanh()
+        )
+
+        self.critic = nn.Sequential(
+            nn.Linear(state_dim, 64), nn.ReLU(),
+            nn.Linear(64, 64), nn.ReLU(),
+            nn.Linear(64, 1)
         )
 
     def forward(self, x):
-        return self.encoder(x)
+        action = self.actor(x)
+        value = self.critic(x)
+        return action, value
 
+# -------------------------------
+# 3. PPO TRAINER
+# -------------------------------
 
-class ThermalLSTM(nn.Module):
+class PPOAgent:
     def __init__(self):
-        super().__init__()
-        self.lstm = nn.LSTM(3, 64, batch_first=True)
-        self.fc = nn.Linear(64, 1)
+        self.model = ActorCritic()
+        self.optimizer = optim.Adam(self.model.parameters(), lr=3e-4)
+        self.gamma = 0.99
+        self.eps_clip = 0.2
 
-    def forward(self, x):
-        _, (h, _) = self.lstm(x)
-        return self.fc(h[-1])
+    def select_action(self, state):
+        state = torch.tensor(state, dtype=torch.float32)
+        action, _ = self.model(state)
+        return action.detach().numpy()
 
+    def compute_returns(self, rewards):
+        returns = []
+        G = 0
+        for r in reversed(rewards):
+            G = r + self.gamma * G
+            returns.insert(0, G)
+        return torch.tensor(returns, dtype=torch.float32)
 
-class TelemetryPredictor(nn.Module):
-    """Short horizon prediction (future state simulation)"""
-    def __init__(self):
-        super().__init__()
-        self.gru = nn.GRU(6, 64, batch_first=True)
-        self.fc = nn.Linear(64, 6)
+    def train(self, trajectories):
+        states = torch.tensor(np.array([t[0] for t in trajectories]), dtype=torch.float32)
+        actions = torch.tensor(np.array([t[1] for t in trajectories]), dtype=torch.float32)
+        rewards = [t[2] for t in trajectories]
 
-    def forward(self, x):
-        out, _ = self.gru(x)
-        return self.fc(out[:, -1])
+        returns = self.compute_returns(rewards)
 
+        pred_actions, values = self.model(states)
+        values = values.squeeze()
 
-# -------------------------------
-# 2. FEATURE ENGINEERING
-# -------------------------------
+        advantages = returns - values.detach()
 
-def compute_features(df: pd.DataFrame) -> pd.DataFrame:
-    df = df.copy()
+        loss_actor = ((pred_actions - actions)**2 * advantages.unsqueeze(1)).mean()
+        loss_critic = (returns - values).pow(2).mean()
 
-    # Slip ratio approximation
-    wheel_cols = ['Wheel_Speed_FL', 'Wheel_Speed_FR', 'Wheel_Speed_RL', 'Wheel_Speed_RR']
-    df['vehicle_speed'] = df[wheel_cols].mean(axis=1)
+        loss = loss_actor + 0.5 * loss_critic
 
-    for col in wheel_cols:
-        df[f'slip_{col}'] = (df[col] - df['vehicle_speed']) / (df['vehicle_speed'] + 1e-3)
-
-    # Longitudinal load proxy
-    df['long_acc'] = df['Brake_Pressure'].diff().fillna(0)
-
-    # Tire energy proxy
-    df['tire_energy'] = df['Brake_Pressure'] * df['vehicle_speed']
-
-    return df
-
-
-# -------------------------------
-# 3. OPTIMIZATION ENGINE
-# -------------------------------
-
-def recommend_setup(z):
-    rec = []
-
-    if z[0] > 1.0:
-        rec.append("Reduce front stiffness or increase rear aero balance")
-
-    if z[1] < -1.0:
-        rec.append("Increase tire pressure or reduce camber")
-
-    if not rec:
-        rec.append("Setup within optimal manifold window")
-
-    return rec
-
-
-# -------------------------------
-# 4. ANOMALY DETECTION
-# -------------------------------
-
-def detect_anomalies(df):
-    anomalies = {}
-    for col in ['Brake_Pressure', 'Damper_Pos']:
-        z = (df[col] - df[col].mean()) / df[col].std()
-        anomalies[col] = (np.abs(z) > 3).sum()
-    return anomalies
-
-
-# -------------------------------
-# 5. STREAMLIT UI
-# -------------------------------
-
-st.set_page_config(layout="wide")
-st.title("🏁 AI Racing Digital Twin")
-
-with st.sidebar:
-    st.header("Chassis Parameters")
-    hp = st.number_input("HP", 500, 3000, 1200)
-    kg = st.number_input("Mass (kg)", 500, 2500, 850)
-    tire_rate = st.number_input("Tire Rate", 100, 500, 280)
-    aero = st.slider("Aero Balance %", 30.0, 70.0, 42.0)
-
-    uploaded = st.file_uploader("Upload Telemetry CSV", type=["csv"])
-
-# -------------------------------
-# 6. MODEL INIT
-# -------------------------------
-
-vae = RacingVAE()
-lstm = ThermalLSTM()
-predictor = TelemetryPredictor()
-
-# -------------------------------
-# 7. BASE INPUT VECTOR
-# -------------------------------
-
-input_vec = torch.tensor([[
-    hp/3000, kg/2500, tire_rate/500, aero/100,
-    0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5
-]], dtype=torch.float32)
-
-with torch.no_grad():
-    z = vae(input_vec).numpy()[0]
-
-# -------------------------------
-# 8. TABS
-# -------------------------------
-
-tab1, tab2, tab3, tab4 = st.tabs([
-    "Manifold",
-    "Thermal",
-    "Telemetry",
-    "Optimization"
-])
-
-# -------------------------------
-# MANIFOLD
-# -------------------------------
-
-with tab1:
-    st.subheader("Latent Setup Space")
-
-    fig, ax = plt.subplots()
-    grid = np.linspace(-3, 3, 50)
-    gx, gy = np.meshgrid(grid, grid)
-    ax.contourf(gx, gy, np.exp(-(gx**2 + gy**2)))
-
-    ax.scatter(z[0], z[1], c='red', s=200)
-    st.pyplot(fig)
-
-# -------------------------------
-# TELEMETRY INGESTION
-# -------------------------------
-
-if uploaded:
-    df = pd.read_csv(uploaded)
-
-    required_cols = [
-        'Wheel_Speed_FL', 'Wheel_Speed_FR',
-        'Wheel_Speed_RL', 'Wheel_Speed_RR',
-        'Brake_Pressure', 'Damper_Pos'
-    ]
-
-    if not all(col in df.columns for col in required_cols):
-        st.error("Missing required telemetry columns")
-        st.stop()
-
-    df = compute_features(df)
-
-    # ---------------------------
-    # THERMAL MODEL
-    # ---------------------------
-
-    with tab2:
-        st.subheader("Thermal Prediction")
-
-        thermal_input = torch.tensor(
-            df[['Brake_Pressure', 'vehicle_speed', 'tire_energy']].values[-50:].reshape(1, 50, 3),
-            dtype=torch.float32
-        )
-
-        with torch.no_grad():
-            temp = lstm(thermal_input).item()
-
-        st.metric("Predicted Carcass Temp", f"{temp:.2f} °C")
-
-    # ---------------------------
-    # TELEMETRY ANALYSIS
-    # ---------------------------
-
-    with tab3:
-        st.subheader("Telemetry Features")
-
-        fig, ax = plt.subplots()
-        ax.plot(df['vehicle_speed'], label="Speed")
-        ax.plot(df['Brake_Pressure'], label="Brake")
-        ax.legend()
-        st.pyplot(fig)
-
-        anomalies = detect_anomalies(df)
-        st.write("Anomalies:", anomalies)
-
-    # ---------------------------
-    # OPTIMIZATION
-    # ---------------------------
-
-    with tab4:
-        st.subheader("Setup Recommendations")
-
-        recs = recommend_setup(z)
-        for r in recs:
-            st.write("•", r)
-
-        # future state simulation
-        sim_input = torch.tensor(
-            df[['vehicle_speed', 'Brake_Pressure', 'Damper_Pos',
-                'tire_energy', 'long_acc', 'slip_Wheel_Speed_FL']].values[-30:].reshape(1, 30, 6),
-            dtype=torch.float32
-        )
-
-        with torch.no_grad():
-            future = predictor(sim_input).numpy()
-
-        st.write("Predicted next state:", future.tolist())
-
-else:
-    st.warning("Upload telemetry to activate full digital twin")
+        self.optimizer.zero_grad()
+        loss.backward()
+        self.optimizer.step()
